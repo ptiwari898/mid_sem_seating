@@ -1,0 +1,6 @@
+Not Eligible Students
+------------------------------------------------------------------------
+Roll Number         Name                          Attendance %
+1002                Diya Patel                           38.00
+1006                Ishita Roy                           29.00
+1010                Sana Iqbal                           33.00

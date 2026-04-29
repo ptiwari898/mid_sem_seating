@@ -1,0 +1,19 @@
+Room A101
+------------------------------------------------------------------------
+Seat    Roll Number         Name                          Attendance %
+1       1001                Aarav Singh                          82.00
+2       1003                Rohan Mehta                          67.00
+3       1004                Ananya Das                           91.00
+4       1005                Karan Verma                          45.00
+
+Room A102
+------------------------------------------------------------------------
+Seat    Roll Number         Name                          Attendance %
+1       1007                Neel Shah                            76.00
+2       1008                Priya Nair                           54.00
+3       1009                Rahul Jain                           40.00
+
+Room A103
+------------------------------------------------------------------------
+Seat    Roll Number         Name                          Attendance %
+No students allocated
