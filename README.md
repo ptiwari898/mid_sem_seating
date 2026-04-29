@@ -19,10 +19,12 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
 - Optional Tkinter GUI.
+- Optional Streamlit web app.
 
 ## Input Format
 
 ### Students file (CSV/Excel)
+
 Required columns:
 
 - `Roll Number`
@@ -30,6 +32,7 @@ Required columns:
 - `Attendance Percentage`
 
 ### Rooms file (CSV/Excel)
+
 Required columns:
 
 - `Room Number`
@@ -69,6 +72,20 @@ python gui.py
 ```
 
 Use file pickers to select students and rooms files, set options, and generate output.
+
+## Web App Usage (Streamlit)
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Then open the local URL shown in terminal (usually `http://localhost:8501`) and:
+
+- Upload student file (CSV/Excel)
+- Upload room file (CSV/Excel)
+- Set cutoff and options (shuffle, alternate seats, PDF)
+- Click **Generate Seating Plan**
+- Download generated reports directly from the page
 
 ## Output Files
 

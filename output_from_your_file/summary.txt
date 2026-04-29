@@ -1,0 +1,10 @@
+Seating Arrangement Summary
+------------------------------------------------------------------------
+Total Students      : 244
+Eligible Students   : 170
+Not Eligible        : 74
+Allocated Students  : 170
+Unallocated Students: 0
+Room Count          : 5
+Total Capacity      : 181
+Effective Capacity  : 181
