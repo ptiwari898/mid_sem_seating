@@ -86,4 +86,3 @@ Generated in output folder:
 - Attendance cutoff must be between 0 and 100.
 - Attendance values can include `%` sign (for example `42%`) and will be parsed correctly.
 - For large datasets, pandas-based vectorized processing is used.
-# mid_sem_seating
