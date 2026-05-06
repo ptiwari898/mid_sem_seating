@@ -1,0 +1,4 @@
+Not Eligible Students
+------------------------------------------------------------------------
+Roll Number         Name                          Attendance %
+0133CI231024        AMANJEET SINGH                       38.00

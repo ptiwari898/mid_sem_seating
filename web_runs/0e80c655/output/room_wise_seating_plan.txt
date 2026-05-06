@@ -1,0 +1,7 @@
+Room 1
+------------------------------------------------------------------------
+Seat    Roll Number         Name                          Attendance %
+1       0133CI231002        AARBI DHAKAD                         82.00
+2       0133CI231008        ABHISHEK KUMAR                       61.00
+3       0133CI231014        ADITYA KUMAR SHAH                    75.00
+4       0133CI231035        ANJALI SHRIVASTAVA                   55.00

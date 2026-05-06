@@ -1,0 +1,12 @@
+Attendance Sheet - Room fghf
+------------------------------------------------------------------------
+Roll Number         Name                          Signature           
+0133CI231002        AARBI DHAKAD                                      
+0133CI231008        ABHISHEK KUMAR                                    
+0133CI231014        ADITYA KUMAR SHAH                                 
+0133CI231035        ANJALI SHRIVASTAVA                                
+
+Attendance Sheet - Room gfhfgh
+------------------------------------------------------------------------
+Roll Number         Name                          Signature           
+No students allocated

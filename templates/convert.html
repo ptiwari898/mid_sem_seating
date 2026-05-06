@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Convert Result Workbook — SIRT Exam Seating{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">&#128194; Step 1 — Convert Result Workbook</h2>
+<p class="text-muted mb-4">
+  Upload your SIRT result Excel file. The app automatically extracts student roll
+  numbers, attendance, and room data from every section sheet.
+</p>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+{% if not extracted %}
+<!-- ── Upload form ─────────────────────────────────────────────────────────── -->
+<div class="card mb-4">
+  <div class="card-header bg-primary text-white">&#128228; Upload Result Workbook</div>
+  <div class="card-body">
+    <form method="POST" enctype="multipart/form-data">
+
+      {% if all_sheets %}
+      <!-- Sheet selector shown after first upload -->
+      <input type="hidden" name="run_id" value="{{ run_id }}" />
+      <input type="hidden" name="filename" value="{{ filename }}" />
+      <div class="mb-3">
+        <label class="form-label fw-semibold">&#128203; Select sheets to extract students from:</label>
+        <p class="text-muted small">Deselect sheets that don't contain student data (e.g. duty charts, summaries).</p>
+        {% for sheet in all_sheets %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="sheets" value="{{ sheet }}"
+            id="sheet_{{ loop.index }}"
+            {% if sheet in selected_sheets %}checked{% endif %}>
+          <label class="form-check-label" for="sheet_{{ loop.index }}">{{ sheet }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="submit" name="do_extract" value="1" class="btn btn-success px-4">
+        &#9881;&#65039; Extract Students &amp; Rooms
+      </button>
+
+      {% else %}
+      <!-- Initial upload -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Result workbook (.xlsx / .xls)</label>
+        <input type="file" class="form-control" name="result_file" accept=".xlsx,.xls" required />
+      </div>
+      <button type="submit" class="btn btn-primary px-4">&#128196; Load Sheets</button>
+      {% endif %}
+
+    </form>
+  </div>
+</div>
+
+<!-- Templates -->
+<div class="card">
+  <div class="card-header bg-secondary text-white">&#11015;&#65039; Input Templates (for Step 2)</div>
+  <div class="card-body d-flex gap-3 flex-wrap">
+    <a href="{{ url_for('template_download', name='students') }}" class="btn btn-outline-secondary">
+      &#11015;&#65039; students_template.xlsx
+    </a>
+    <a href="{{ url_for('template_download', name='rooms') }}" class="btn btn-outline-secondary">
+      &#11015;&#65039; rooms_template.xlsx
+    </a>
+  </div>
+</div>
+
+{% else %}
+<!-- ── Extraction results ──────────────────────────────────────────────────── -->
+<div class="alert alert-success">&#9989; Extraction complete!</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card stat-card primary p-3">
+      <div class="text-muted small">Total Students</div>
+      <div class="fs-3 fw-bold text-primary">{{ total_students }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card success p-3">
+      <div class="text-muted small">Rooms Found</div>
+      <div class="fs-3 fw-bold text-success">{{ total_rooms }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card warning p-3">
+      <div class="text-muted small">Sections</div>
+      <div class="fs-3 fw-bold text-warning">{{ sections }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <!-- Students preview -->
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header bg-primary text-white">&#128104;&#8205;&#127979; Students (first 20)</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>{% for col in students_columns %}<th>{{ col }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+              {% for row in students_preview %}
+              <tr>{% for col in students_columns %}<td>{{ row[col] }}</td>{% endfor %}</tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer">
+        <a href="{{ url_for('download_file', run_id=run_id, filename='students_extracted.xlsx') }}"
+           class="btn btn-sm btn-outline-primary">
+          &#11015;&#65039; Download students_extracted.xlsx ({{ total_students }} rows)
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rooms preview -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-success text-white">&#127979; Rooms</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>{% for col in rooms_columns %}<th>{{ col }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+              {% for row in rooms_preview %}
+              <tr>{% for col in rooms_columns %}<td>{{ row[col] }}</td>{% endfor %}</tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer">
+        {% if total_rooms > 0 %}
+        <a href="{{ url_for('download_file', run_id=run_id, filename='rooms_extracted.xlsx') }}"
+           class="btn btn-sm btn-outline-success">
+          &#11015;&#65039; Download rooms_extracted.xlsx
+        </a>
+        {% else %}
+        <span class="text-warning">No rooms found. Upload rooms manually in Step 2.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<a href="{{ url_for('generate') }}" class="btn btn-primary btn-lg">
+  &#9654;&#65039; Continue to Step 2 — Generate Seating Plan
+</a>
+{% endif %}
+
+{% endblock %}

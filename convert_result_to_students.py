@@ -112,6 +112,61 @@ def extract_rooms_from_workbook(path: Path) -> pd.DataFrame:
     return pd.DataFrame(columns=["Room Number", "Capacity"])
 
 
+def extract_timetable_from_workbook(path: Path) -> list[dict]:
+    """
+    Extract the exam timetable (subject + date pairs) from any section sheet.
+
+    Looks for the pattern where:
+      - A header row contains datetime objects (exam dates) in columns after the
+        fixed student columns (S.NO, Board EnrollNo, Student Name, Total Per).
+      - The very next row contains subject codes / names in those same columns.
+
+    Returns a list of dicts: [{"subject": "CSIT-601 SE", "date": "06-Apr-26"}, ...]
+    """
+    import datetime as _dt
+
+    xl = pd.ExcelFile(path)
+    # Try each sheet; use the first one that yields timetable data
+    for sheet in xl.sheet_names:
+        if "debarred" in sheet.lower():
+            continue
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(path), data_only=True)
+            if sheet not in wb.sheetnames:
+                continue
+            ws = wb[sheet]
+            rows = list(ws.iter_rows(min_row=1, max_row=20, values_only=True))
+        except Exception:
+            continue
+
+        for i, row in enumerate(rows):
+            # Find a row that has datetime values starting from column index 4
+            date_cols = [
+                (col_idx, val)
+                for col_idx, val in enumerate(row)
+                if isinstance(val, _dt.datetime) and col_idx >= 4
+            ]
+            if not date_cols:
+                continue
+            # The next row should have subject names
+            if i + 1 >= len(rows):
+                continue
+            subj_row = rows[i + 1]
+            timetable: list[dict] = []
+            for col_idx, date_val in date_cols:
+                subj = subj_row[col_idx] if col_idx < len(subj_row) else None
+                if not subj:
+                    continue
+                subj_clean = str(subj).replace("\n", " ").strip()
+                date_str = date_val.strftime("%d-%b-%y")
+                timetable.append({"subject": subj_clean, "date": date_str})
+            if timetable:
+                return timetable
+
+    return []
+
+
 def convert_result_file(
     path: Path,
     sheets: list[str] | None = None,

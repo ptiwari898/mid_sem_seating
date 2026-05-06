@@ -26,6 +26,7 @@ from exam_seating.sirt_exporters import (
     export_sirt_attendance_sheets_excel,
     export_sirt_debarred_excel,
     export_sirt_main_seating_excel,
+    export_sirt_section_attendance_excel,
 )
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -433,6 +434,8 @@ def tab_generate(info: dict) -> None:
         st.session_state["manual_rooms"] = []
     if "manual_exam_config" not in st.session_state:
         st.session_state["manual_exam_config"] = []
+    if "manual_timetable" not in st.session_state:
+        st.session_state["manual_timetable"] = []
 
     # ── Tab switcher for input method ──────────────────────────────────────────
     have_extracted = "extracted_students" in st.session_state
@@ -453,7 +456,156 @@ def tab_generate(info: dict) -> None:
     else:
         # ── MANUAL ENTRY SECTION ──────────────────────────────────────────────
         st.subheader("👨‍🎓 Add Students")
-        st.caption("Enter student details one by one. Roll number must be unique.")
+        st.caption("Enter student details one by one, or upload an Excel/CSV file.")
+
+        # ── Upload options ─────────────────────────────────────────────────────
+        upload_mode = st.radio(
+            "Upload method:",
+            ["Simple Excel / CSV", "Section-wise Attendance Workbook (multi-sheet)"],
+            horizontal=True,
+            key="student_upload_mode",
+        )
+
+        # ── Simple upload ──────────────────────────────────────────────────────
+        with st.expander("📂 Upload Students from Excel / CSV", expanded=upload_mode == "Simple Excel / CSV"):
+            st.caption(
+                "File must have columns: **Roll Number**, **Name**, **Attendance Percentage**. "
+                "Duplicate roll numbers will be skipped."
+            )
+            uploaded_students = st.file_uploader(
+                "Choose file", type=["xlsx", "xls", "csv"], key="students_upload"
+            )
+            col_import, col_dl = st.columns([1, 1])
+            if col_import.button("⬆️ Import Students", key="import_students_btn"):
+                if uploaded_students is None:
+                    st.error("Please select a file first.")
+                else:
+                    try:
+                        if uploaded_students.name.endswith(".csv"):
+                            df_up = pd.read_csv(uploaded_students)
+                        else:
+                            df_up = pd.read_excel(uploaded_students)
+
+                        required_cols = {"Roll Number", "Name", "Attendance Percentage"}
+                        missing = required_cols - set(df_up.columns)
+                        if missing:
+                            st.error(f"Missing columns: {', '.join(missing)}")
+                        else:
+                            df_up = df_up.dropna(subset=["Roll Number", "Name"])
+                            existing_rolls = {s["Roll Number"] for s in st.session_state["manual_students"]}
+                            added, skipped = 0, 0
+                            for _, row in df_up.iterrows():
+                                roll = str(row["Roll Number"]).strip()
+                                if roll in existing_rolls:
+                                    skipped += 1
+                                else:
+                                    st.session_state["manual_students"].append({
+                                        "Roll Number": roll,
+                                        "Name": str(row["Name"]).strip(),
+                                        "Attendance Percentage": float(row["Attendance Percentage"]),
+                                    })
+                                    existing_rolls.add(roll)
+                                    added += 1
+                            msg = f"✅ Imported **{added}** student(s)."
+                            if skipped:
+                                msg += f" Skipped **{skipped}** duplicate(s)."
+                            st.success(msg)
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to read file: {exc}")
+
+            col_dl.download_button(
+                "⬇️ Download Template",
+                data=_make_students_template(),
+                file_name="students_template.xlsx",
+                mime=XLSX_MIME,
+                key="dl_students_template_manual",
+            )
+
+        # ── Section-wise workbook upload ───────────────────────────────────────
+        with st.expander("📑 Upload Section-wise Attendance Workbook", expanded=upload_mode == "Section-wise Attendance Workbook (multi-sheet)"):
+            st.caption(
+                "Upload a multi-sheet Excel workbook where **each sheet is one section** "
+                "(e.g. *6th A*, *6th B*, *CSIT-A*). "
+                "Each sheet must contain roll number, name, and attendance % columns "
+                "(column names are detected automatically). "
+                "Debarred sheets are skipped automatically."
+            )
+            uploaded_section_wb = st.file_uploader(
+                "Choose workbook", type=["xlsx", "xls"], key="section_wb_upload"
+            )
+
+            if uploaded_section_wb is not None:
+                try:
+                    import tempfile, os
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+                        tmp.write(uploaded_section_wb.getbuffer())
+                        tmp_path = Path(tmp.name)
+
+                    xl_preview = pd.ExcelFile(tmp_path)
+                    all_sheets = xl_preview.sheet_names
+                    non_debarred = [s for s in all_sheets if "debarred" not in s.lower()]
+
+                    st.info(
+                        f"Detected **{len(all_sheets)}** sheet(s): {', '.join(all_sheets)}. "
+                        f"**{len(non_debarred)}** will be processed (debarred sheets skipped)."
+                    )
+
+                    selected_sheets = st.multiselect(
+                        "Sheets to import (deselect any you want to skip):",
+                        options=non_debarred,
+                        default=non_debarred,
+                        key="section_wb_sheets",
+                    )
+                except Exception as exc:
+                    st.error(f"Could not read workbook: {exc}")
+                    selected_sheets = []
+                    tmp_path = None
+            else:
+                selected_sheets = []
+                tmp_path = None
+
+            if st.button("⬆️ Import from Workbook", key="import_section_wb_btn"):
+                if uploaded_section_wb is None:
+                    st.error("Please select a workbook first.")
+                elif not selected_sheets:
+                    st.error("No sheets selected.")
+                else:
+                    try:
+                        students_extracted, _ = convert_result_file(
+                            tmp_path, sheets=selected_sheets, skip_debarred=False
+                        )
+                        if students_extracted.empty:
+                            st.error(
+                                "No valid student data found. Make sure each sheet has "
+                                "roll number, name, and attendance % columns."
+                            )
+                        else:
+                            existing_rolls = {s["Roll Number"] for s in st.session_state["manual_students"]}
+                            added, skipped = 0, 0
+                            for _, row in students_extracted.iterrows():
+                                roll = str(row["Roll Number"]).strip()
+                                if roll in existing_rolls:
+                                    skipped += 1
+                                else:
+                                    st.session_state["manual_students"].append({
+                                        "Roll Number": roll,
+                                        "Name": str(row["Name"]).strip(),
+                                        "Attendance Percentage": float(row["Attendance Percentage"]),
+                                    })
+                                    existing_rolls.add(roll)
+                                    added += 1
+                            msg = f"✅ Imported **{added}** student(s) from **{len(selected_sheets)}** section(s)."
+                            if skipped:
+                                msg += f" Skipped **{skipped}** duplicate(s)."
+                            st.success(msg)
+                            try:
+                                os.unlink(tmp_path)
+                            except Exception:
+                                pass
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(f"Import failed: {exc}")
 
         with st.form("add_student_form", clear_on_submit=True):
             col1, col2, col3, col_btn = st.columns([2, 3, 2, 1])
@@ -557,6 +709,38 @@ def tab_generate(info: dict) -> None:
         exam_config_df = pd.DataFrame(st.session_state["manual_exam_config"]) if st.session_state["manual_exam_config"] else None
 
     st.divider()
+
+    # ── Exam Timetable (section-wise attendance sheet columns) ─────────────────
+    with st.expander("📅 Exam Timetable — for section-wise attendance sheets (optional)", expanded=False):
+        st.caption(
+            "Add each exam subject with its date. The section-wise attendance sheet will show "
+            "these as column headers (dates merged across subjects on the same day), "
+            "matching the SIRT format."
+        )
+        with st.form("add_timetable_form", clear_on_submit=True):
+            tc1, tc2, tc_btn = st.columns([3, 2, 1])
+            tt_subject = tc1.text_input("Subject code / name", placeholder="CSIT-601 SE")
+            tt_date = tc2.text_input("Exam date", placeholder="06-Apr-26")
+            add_tt = tc_btn.form_submit_button("➕ Add")
+
+            if add_tt and tt_subject:
+                st.session_state["manual_timetable"].append({
+                    "subject": tt_subject.strip(),
+                    "date": tt_date.strip(),
+                })
+                st.success(f"Added: {tt_subject.strip()} — {tt_date.strip()}")
+
+        if st.session_state["manual_timetable"]:
+            st.markdown("**Timetable:**")
+            tt_df = pd.DataFrame(st.session_state["manual_timetable"])
+            tt_df.index = tt_df.index + 1
+            col_tt, col_tt_del = st.columns([0.95, 0.05])
+            col_tt.dataframe(tt_df, use_container_width=True)
+            if col_tt_del.button("🗑️", key="del_timetable", help="Clear timetable"):
+                st.session_state["manual_timetable"] = []
+                st.rerun()
+
+    st.divider()
     st.subheader("⚙️ Options")
     o1, o2, o3, o4, o5 = st.columns(5)
     attendance_cutoff = o1.number_input("Attendance cutoff (%)", 0.0, 100.0, 40.0, 1.0)
@@ -657,14 +841,23 @@ def tab_generate(info: dict) -> None:
         institute=info["institute"], department=info["department"],
         exam_title=info["exam_title"], attendance_cutoff=float(attendance_cutoff),
     )
+    # Section-wise attendance with timetable columns (if timetable was provided)
+    timetable = st.session_state.get("manual_timetable", [])
     sirt_att_path = export_sirt_attendance_sheets_excel(
         room_allocations_enriched, output_dir,
         institute=info["institute"], department=info["department"],
         exam_title=info["exam_title"],
+        timetable=timetable,
+    )
+    sirt_sec_att_path = export_sirt_section_attendance_excel(
+        room_allocations_enriched, output_dir,
+        timetable=timetable,
+        institute=info["institute"], department=info["department"],
+        exam_title=info["exam_title"], semester=info["semester"],
     )
 
     st.subheader("SIRT-Formatted Downloads")
-    d1, d2, d3 = st.columns(3)
+    d1, d2, d3, d4 = st.columns(4)
     d1.download_button(
         "⬇ Main Seating Plan (SIRT format)",
         data=sirt_seating_path.read_bytes(),
@@ -676,9 +869,15 @@ def tab_generate(info: dict) -> None:
         file_name="SIRT_Debarred_List.xlsx", mime=XLSX_MIME,
     )
     d3.download_button(
-        "⬇ Attendance Sheets (SIRT format)",
+        "⬇ Attendance Sheets (room-wise)",
         data=sirt_att_path.read_bytes(),
         file_name="SIRT_Attendance_Sheets.xlsx", mime=XLSX_MIME,
+    )
+    d4.download_button(
+        "⬇ Section Attendance (with subjects)",
+        data=sirt_sec_att_path.read_bytes(),
+        file_name="SIRT_Section_Attendance.xlsx", mime=XLSX_MIME,
+        help="Section-wise sheets with date/subject columns. Add subjects via 'Exam Timetable' above.",
     )
 
     with st.expander("Other generated files"):
@@ -707,11 +906,7 @@ def main() -> None:
 
     info = _sidebar_institute_info()
 
-    tab1, tab2 = st.tabs(["Step 1: Convert Result Workbook", "Step 2: Generate Seating Plan"])
-    with tab1:
-        tab_convert()
-    with tab2:
-        tab_generate(info)
+    tab_generate(info)
 
 
 if __name__ == "__main__":
