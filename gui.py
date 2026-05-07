@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -12,7 +13,7 @@ class SeatingApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Exam Seating Arrangement")
-        self.geometry("700x420")
+        self.geometry("700x490")
         self.resizable(False, False)
 
         self.students_path = tk.StringVar()
@@ -30,20 +31,27 @@ class SeatingApp(tk.Tk):
         frame = ttk.Frame(self, padding=16)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(frame, text="Students File (CSV/Excel)").grid(row=0, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.students_path, width=60).grid(row=1, column=0, sticky="we")
-        ttk.Button(frame, text="Browse", command=self._browse_students).grid(row=1, column=1, padx=8)
+        # Template download row
+        tpl_frame = ttk.Frame(frame)
+        tpl_frame.grid(row=0, column=0, columnspan=2, sticky="we", pady=(0, 8))
+        ttk.Label(tpl_frame, text="Need a template?").pack(side=tk.LEFT)
+        ttk.Button(tpl_frame, text="Download Students Template", command=self._save_students_template).pack(side=tk.LEFT, padx=(10, 4))
+        ttk.Button(tpl_frame, text="Download Rooms Template", command=self._save_rooms_template).pack(side=tk.LEFT, padx=4)
 
-        ttk.Label(frame, text="Rooms File (CSV/Excel)").grid(row=2, column=0, sticky="w", pady=(12, 0))
-        ttk.Entry(frame, textvariable=self.rooms_path, width=60).grid(row=3, column=0, sticky="we")
-        ttk.Button(frame, text="Browse", command=self._browse_rooms).grid(row=3, column=1, padx=8)
+        ttk.Label(frame, text="Students File (CSV/Excel)").grid(row=1, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=self.students_path, width=60).grid(row=2, column=0, sticky="we")
+        ttk.Button(frame, text="Browse", command=self._browse_students).grid(row=2, column=1, padx=8)
 
-        ttk.Label(frame, text="Output Directory").grid(row=4, column=0, sticky="w", pady=(12, 0))
-        ttk.Entry(frame, textvariable=self.output_dir, width=60).grid(row=5, column=0, sticky="we")
-        ttk.Button(frame, text="Browse", command=self._browse_output).grid(row=5, column=1, padx=8)
+        ttk.Label(frame, text="Rooms File (CSV/Excel)").grid(row=3, column=0, sticky="w", pady=(12, 0))
+        ttk.Entry(frame, textvariable=self.rooms_path, width=60).grid(row=4, column=0, sticky="we")
+        ttk.Button(frame, text="Browse", command=self._browse_rooms).grid(row=4, column=1, padx=8)
+
+        ttk.Label(frame, text="Output Directory").grid(row=5, column=0, sticky="w", pady=(12, 0))
+        ttk.Entry(frame, textvariable=self.output_dir, width=60).grid(row=6, column=0, sticky="we")
+        ttk.Button(frame, text="Browse", command=self._browse_output).grid(row=6, column=1, padx=8)
 
         options = ttk.Frame(frame)
-        options.grid(row=6, column=0, columnspan=2, sticky="we", pady=(16, 0))
+        options.grid(row=7, column=0, columnspan=2, sticky="we", pady=(16, 0))
 
         ttk.Label(options, text="Attendance Cutoff (%)").grid(row=0, column=0, sticky="w")
         ttk.Entry(options, textvariable=self.attendance_cutoff, width=10).grid(row=0, column=1, sticky="w", padx=(8, 20))
@@ -65,12 +73,44 @@ class SeatingApp(tk.Tk):
         ).grid(row=1, column=2, columnspan=3, sticky="w", pady=(8, 0))
 
         ttk.Button(frame, text="Generate Seating Plan", command=self._generate).grid(
-            row=7, column=0, columnspan=2, pady=(22, 0)
+            row=8, column=0, columnspan=2, pady=(22, 0)
         )
 
         self.status = tk.Text(frame, height=8, width=80)
-        self.status.grid(row=8, column=0, columnspan=2, pady=(14, 0))
+        self.status.grid(row=9, column=0, columnspan=2, pady=(14, 0))
         self.status.configure(state=tk.DISABLED)
+
+    def _save_students_template(self) -> None:
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+            initialfile="students_template.csv",
+            title="Save Students Template",
+        )
+        if not path:
+            return
+        with open(path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Roll Number", "Name", "Attendance Percentage"])
+            writer.writerow(["1001", "Example Student 1", "85"])
+            writer.writerow(["1002", "Example Student 2", "42"])
+        messagebox.showinfo("Template Saved", f"Students template saved to:\n{path}")
+
+    def _save_rooms_template(self) -> None:
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+            initialfile="rooms_template.csv",
+            title="Save Rooms Template",
+        )
+        if not path:
+            return
+        with open(path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Room Number", "Capacity"])
+            writer.writerow(["A101", "30"])
+            writer.writerow(["A102", "30"])
+        messagebox.showinfo("Template Saved", f"Rooms template saved to:\n{path}")
 
     def _browse_students(self) -> None:
         path = filedialog.askopenfilename(
