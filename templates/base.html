@@ -26,6 +26,7 @@
     <div class="navbar-nav ms-auto">
       <a class="nav-link {% if request.endpoint == 'convert'  %}active fw-bold{% endif %}" href="{{ url_for('convert')  }}">Step 1 — Convert Result</a>
       <a class="nav-link {% if request.endpoint == 'generate' %}active fw-bold{% endif %}" href="{{ url_for('generate') }}">Step 2 — Generate Plan</a>
+      <a class="nav-link {% if request.endpoint == 'result_analysis' %}active fw-bold{% endif %}" href="{{ url_for('result_analysis') }}">📊 Result Analysis</a>
     </div>
   </div>
 </nav>

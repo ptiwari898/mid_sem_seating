@@ -7,7 +7,10 @@ Routes:
   POST /convert           – Process uploaded result workbook
   GET  /generate          – Seating plan form
   POST /generate          – Generate seating plan & return download links
+  GET  /result_analysis   – Result analysis & statistics
+  POST /result_analysis   – Process results file for analysis
   GET  /download/<run_id>/<filename>  – Download a generated file
+  GET  /download_analysis/<run_id>/<report_type>  – Download analysis report
   GET  /template/<name>   – Download an input template
 """
 from __future__ import annotations
@@ -31,6 +34,7 @@ from flask import (
 
 from convert_result_to_students import convert_result_file, extract_timetable_from_workbook
 from exam_seating.io_utils import DataValidationError
+from exam_seating.result_analyzer import ResultDatabase
 from exam_seating.service import SeatingConfig, run_seating_system
 from exam_seating.sirt_exporters import (
     export_sirt_debarred_excel,
@@ -333,6 +337,131 @@ def download_file(run_id: str, filename: str):
         "application/octet-stream"
     )
     return send_file(str(fp), mimetype=mime, as_attachment=True, download_name=safe_name)
+
+
+@app.route("/result_analysis", methods=["GET", "POST"])
+def result_analysis():
+    """Handle result analysis upload and statistics generation."""
+    if request.method == "GET":
+        return render_template("result_analysis.html")
+
+    # POST – process uploaded results file
+    if "results_file" not in request.files or request.files["results_file"].filename == "":
+        return render_template("result_analysis.html", error="No file uploaded.")
+
+    f = request.files["results_file"]
+    run_id = uuid4().hex[:8]
+    tmp_dir = WEB_RUNS / run_id / "input"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    result_path = tmp_dir / f.filename
+
+    try:
+        f.save(str(result_path))
+
+        # Read file
+        if f.filename.endswith(".csv"):
+            df = pd.read_csv(result_path)
+        else:
+            df = pd.read_excel(result_path)
+
+        # Get parameters
+        try:
+            pass_threshold = float(request.form.get("pass_threshold", 40))
+        except ValueError:
+            pass_threshold = 40.0
+
+        semester = request.form.get("semester", "Unknown")
+
+        # Initialize database
+        db_path = str(WEB_RUNS / run_id / "result_analysis.db")
+        db = ResultDatabase(db_path)
+
+        # Import data
+        db.import_from_dataframe(df, pass_threshold=pass_threshold, semester=semester)
+
+        # Get analysis data
+        overall_stats = db.get_overall_statistics()
+        faculty_analysis = db.get_faculty_wise_analysis()
+        subject_analysis = db.get_subject_wise_analysis()
+        section_analysis = db.get_section_wise_analysis()
+
+        # Get preview of first 10 rows
+        preview_data = df.head(10).to_dict(orient="records")
+        preview_columns = list(df.columns)
+
+        db.close()
+
+        return render_template(
+            "result_analysis.html",
+            run_id=run_id,
+            overall_stats=overall_stats,
+            faculty_analysis=faculty_analysis,
+            subject_analysis=subject_analysis,
+            section_analysis=section_analysis,
+            preview_data=preview_data,
+            preview_columns=preview_columns,
+            success=f"Analysis completed! {overall_stats['total_students']} students analyzed.",
+        )
+
+    except Exception as exc:
+        return render_template("result_analysis.html", error=f"Error processing file: {str(exc)}")
+
+
+@app.route("/download_analysis/<run_id>/<report_type>")
+def download_analysis_report(run_id: str, report_type: str):
+    """Download analysis report in Excel format."""
+    # Validate run_id (basic security)
+    if not run_id.replace("-", "").replace("_", "").isalnum() or len(run_id) > 20:
+        return "Invalid run_id", 400
+
+    # Initialize database
+    db_path = str(WEB_RUNS / run_id / "result_analysis.db")
+    if not Path(db_path).exists():
+        return "Analysis not found", 404
+
+    try:
+        db = ResultDatabase(db_path)
+
+        # Generate report based on type
+        if report_type == "overall":
+            stats = db.get_overall_statistics()
+            df = pd.DataFrame([stats])
+            filename = "overall_statistics.xlsx"
+
+        elif report_type == "faculty":
+            data = db.get_faculty_wise_analysis()
+            df = pd.DataFrame(data)
+            filename = "faculty_wise_analysis.xlsx"
+
+        elif report_type == "subject":
+            data = db.get_subject_wise_analysis()
+            df = pd.DataFrame(data)
+            filename = "subject_wise_analysis.xlsx"
+
+        elif report_type == "section":
+            data = db.get_section_wise_analysis()
+            df = pd.DataFrame(data)
+            filename = "section_wise_analysis.xlsx"
+
+        else:
+            return "Invalid report type", 400
+
+        db.close()
+
+        # Generate Excel file
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False, sheet_name="Analysis")
+        buf.seek(0)
+
+        return send_file(
+            buf,
+            mimetype=XLSX_MIME,
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    except Exception as exc:
+        return f"Error generating report: {str(exc)}", 500
 
 
 @app.route("/template/<name>")
