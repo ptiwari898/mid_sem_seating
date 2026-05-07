@@ -1,5 +1,12 @@
 # Automatic Exam Seating Arrangement System
 
+[GitHub Repository](https://github.com/ptiwari898/mid_sem_seating)
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
+See the [LICENSE](LICENSE) file for full license text.
+
 A complete Python-based system to automate exam seating arrangement using student attendance and room capacity.
 
 ## Features
@@ -18,8 +25,7 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Summary report (text)
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
-- Optional Tkinter GUI.
-- Optional Streamlit web app.
+- Streamlit web app.
 
 ## Input Format
 
@@ -44,36 +50,13 @@ Required columns:
 pip install -r requirements.txt
 ```
 
-## CLI Usage
-
-```bash
-python main.py --students sample_data/students.csv --rooms sample_data/rooms.csv --attendance-cutoff 40 --output-dir output
-```
-
-### Useful options
-
-```bash
---shuffle              Shuffle eligible students before allocation
---seed 42              Seed for reproducible shuffle
---alternate-seats      Allocate on alternate seat numbers only
---export-pdf           Export room-wise seating plan PDF (requires reportlab)
-```
-
-Example with all options:
-
-```bash
-python main.py --students sample_data/students.csv --rooms sample_data/rooms.csv --attendance-cutoff 40 --output-dir output --shuffle --seed 42 --alternate-seats --export-pdf
-```
-
-## GUI Usage
-
-```bash
-python gui.py
-```
-
-Use file pickers to select students and rooms files, set options, and generate output.
-
 ## Web App Usage (Streamlit)
+
+```bash
+python run.py
+```
+
+or
 
 ```bash
 streamlit run streamlit_app.py
