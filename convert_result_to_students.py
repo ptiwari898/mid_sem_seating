@@ -48,7 +48,8 @@ def _parse_section_branch(sheet_name: str) -> tuple[str, str]:
     # Match trailing single uppercase letter as section, e.g. "6th A" -> A
     m = re.search(r"\b([A-Z])\s*$", name)
     section = m.group(1) if m else ""
-    branch = "CSIT"  # default; can be overridden if sheet name contains other clues
+    branch_part = re.sub(r"\s*[-_]?\s*[A-Z]\s*$", "", name).strip(" -_")
+    branch = branch_part if branch_part else "CSIT"
     return branch, section
 
 

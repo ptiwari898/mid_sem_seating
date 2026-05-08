@@ -13,6 +13,10 @@ Tab 2 – Generate Seating Plan
 from __future__ import annotations
 
 import io
+import re
+import shutil
+import time
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,15 +24,21 @@ import pandas as pd
 import streamlit as st
 
 from convert_result_to_students import convert_result_file
-from exam_seating.io_utils import DataValidationError
+from exam_seating.io_utils import DataValidationError, load_rooms, load_students
 from exam_seating.service import SeatingConfig, run_seating_system
 from exam_seating.sirt_exporters import (
     export_sirt_attendance_sheets_excel,
     export_sirt_debarred_excel,
     export_sirt_main_seating_excel,
 )
+from ui.sidebar import sidebar_institute_info
+from ui.tab_convert import render_tab_convert
+from ui.tab_generate import render_tab_generate
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ZIP_MIME = "application/zip"
+WEB_RUNS_DIR = Path("web_runs")
+RUN_RETENTION_SECONDS = 3600
 
 
 def _save_uploaded(uploaded_file, target_dir: Path) -> Path:
@@ -36,6 +46,88 @@ def _save_uploaded(uploaded_file, target_dir: Path) -> Path:
     path = target_dir / uploaded_file.name
     path.write_bytes(uploaded_file.getbuffer())
     return path
+
+
+def _get_session_input_dir() -> Path:
+    if "upload_run_id" not in st.session_state:
+        st.session_state["upload_run_id"] = uuid4().hex[:8]
+    return WEB_RUNS_DIR / st.session_state["upload_run_id"] / "input"
+
+
+def _cleanup_old_web_runs(retention_seconds: int = RUN_RETENTION_SECONDS) -> None:
+    if not WEB_RUNS_DIR.exists():
+        return
+
+    cutoff = time.time() - retention_seconds
+    for item in WEB_RUNS_DIR.iterdir():
+        if not item.is_dir():
+            continue
+        try:
+            if item.stat().st_mtime < cutoff:
+                shutil.rmtree(item, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def _load_students_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
+    path = _save_uploaded(uploaded_file, _get_session_input_dir())
+    suffix = path.suffix.lower()
+
+    if suffix in {".db", ".sqlite", ".sqlite3"}:
+        file_spec = f"{path}::{sqlite_table.strip()}" if sqlite_table.strip() else str(path)
+        return load_students(file_spec)
+
+    if suffix == ".csv":
+        return pd.read_csv(path)
+
+    # Read ALL sheets and combine them for Excel inputs.
+    xl = pd.ExcelFile(path)
+    sheet_frames = []
+    required = {"Roll Number", "Name", "Attendance Percentage"}
+    skipped_sheets = []
+    multi_sheet = len(xl.sheet_names) > 1
+    for sheet in xl.sheet_names:
+        df_sheet = pd.read_excel(xl, sheet_name=sheet)
+        df_sheet.columns = [c.strip() for c in df_sheet.columns]
+        if required.issubset(set(df_sheet.columns)):
+            if multi_sheet and "Section" not in df_sheet.columns:
+                m = re.search(r"\b([A-Z])\s*$", sheet.strip())
+                df_sheet["Section"] = m.group(1) if m else sheet.strip()
+            if multi_sheet and "Branch" not in df_sheet.columns:
+                branch_part = re.sub(r"\s*[A-Z]\s*$", "", sheet.strip()).strip()
+                df_sheet["Branch"] = branch_part if branch_part else "CSIT"
+            sheet_frames.append(df_sheet)
+        else:
+            skipped_sheets.append(sheet)
+
+    if not sheet_frames:
+        raise DataValidationError(
+            f"None of the {len(xl.sheet_names)} sheet(s) contain the required columns: "
+            "Roll Number, Name, Attendance Percentage."
+        )
+
+    students_df = pd.concat(sheet_frames, ignore_index=True)
+    if skipped_sheets:
+        st.caption(f"ℹ️ Skipped sheets (missing required columns): {', '.join(skipped_sheets)}")
+    return students_df
+
+
+def _load_rooms_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
+    path = _save_uploaded(uploaded_file, _get_session_input_dir())
+    suffix = path.suffix.lower()
+    if suffix in {".db", ".sqlite", ".sqlite3"}:
+        file_spec = f"{path}::{sqlite_table.strip()}" if sqlite_table.strip() else str(path)
+        return load_rooms(file_spec)
+    if suffix == ".csv":
+        df = pd.read_csv(path)
+    else:
+        df = pd.read_excel(path)
+
+    required = {"Room Number", "Capacity"}
+    missing = required - set(df.columns)
+    if missing:
+        raise DataValidationError(f"Missing columns in uploaded rooms file: {', '.join(sorted(missing))}")
+    return df[["Room Number", "Capacity"]].copy()
 
 
 def _df_to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -217,47 +309,12 @@ def _make_sample_result_workbook() -> bytes:
     return buf.getvalue()
 
 
-def _merge_workbooks(paths: list, labels: list[str]) -> bytes:
-    """Merge multiple xlsx files into one workbook, prefixing sheet names with a label."""
-    import io as _io
-    from openpyxl import load_workbook
-    from openpyxl import Workbook as _WB
-    from copy import copy
-
-    merged = _WB()
-    merged.remove(merged.active)  # remove default empty sheet
-
-    for path, label in zip(paths, labels):
-        wb = load_workbook(path)
-        for src_ws in wb.worksheets:
-            raw_name = f"{label}-{src_ws.title}" if len(wb.worksheets) > 1 else label
-            safe = "".join(c for c in raw_name if c not in r'\/*?:[]')[:31]
-            dst_ws = merged.create_sheet(title=safe)
-
-            # Copy column dimensions
-            for col, dim in src_ws.column_dimensions.items():
-                dst_ws.column_dimensions[col].width = dim.width
-
-            # Copy row dimensions
-            for row, dim in src_ws.row_dimensions.items():
-                dst_ws.row_dimensions[row].height = dim.height
-
-            # Copy merged cell ranges
-            for merge in src_ws.merged_cells.ranges:
-                dst_ws.merge_cells(str(merge))
-
-            # Copy cells (value + style)
-            for row in src_ws.iter_rows():
-                for cell in row:
-                    dst_cell = dst_ws.cell(row=cell.row, column=cell.column, value=cell.value)
-                    if cell.has_style:
-                        dst_cell.font      = copy(cell.font)
-                        dst_cell.fill      = copy(cell.fill)
-                        dst_cell.border    = copy(cell.border)
-                        dst_cell.alignment = copy(cell.alignment)
-
-    buf = _io.BytesIO()
-    merged.save(buf)
+def _bundle_reports_zip(paths: list[Path], archive_names: list[str]) -> bytes:
+    """Bundle generated reports into a single zip download without rewriting workbooks."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path, archive_name in zip(paths, archive_names):
+            zf.writestr(archive_name, path.read_bytes())
     return buf.getvalue()
 
 
@@ -361,8 +418,10 @@ def tab_convert() -> None:
         st.info("⬆️  Upload a result workbook above, then click **Extract Students & Rooms**.")
         return
 
+    _cleanup_old_web_runs()
+
     run_id = uuid4().hex[:8]
-    tmp_dir = Path("web_runs") / run_id / "input"
+    tmp_dir = WEB_RUNS_DIR / run_id / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     result_path = tmp_dir / result_file.name
     result_path.write_bytes(result_file.getbuffer())
@@ -461,7 +520,7 @@ def tab_generate(info: dict) -> None:
     # ── 1. Upload Students Excel ───────────────────────────────────────────────
     st.subheader("1. Upload Students Excel")
     st.caption(
-        "Your file must have these columns: **Roll Number** · **Name** · **Attendance Percentage**"
+        "Your file must have: **Roll Number** · **Name** · **Attendance Percentage** (CSV/Excel/SQLite)"
     )
     col_tmpl, _ = st.columns([1, 3])
     col_tmpl.download_button(
@@ -471,51 +530,21 @@ def tab_generate(info: dict) -> None:
         mime=XLSX_MIME,
         key="tmpl_students_gen",
     )
+    students_sqlite_table = st.text_input(
+        "Students SQLite table name (optional, default: students)",
+        value="students",
+        help="Use this only when uploading .db/.sqlite/.sqlite3 files.",
+    )
     students_file = st.file_uploader(
-        "Upload students Excel (.xlsx / .xls / .csv)",
-        type=["xlsx", "xls", "csv"],
+        "Upload students file (.xlsx / .xls / .csv / .db / .sqlite / .sqlite3)",
+        type=["xlsx", "xls", "csv", "db", "sqlite", "sqlite3"],
         key="students_upload_gen",
     )
 
     students_df = pd.DataFrame()
     if students_file is not None:
         try:
-            if students_file.name.endswith(".csv"):
-                students_df = pd.read_csv(students_file)
-            else:
-                # Read ALL sheets and combine them
-                xl = pd.ExcelFile(students_file)
-                sheet_frames = []
-                required = {"Roll Number", "Name", "Attendance Percentage"}
-                skipped_sheets = []
-                multi_sheet = len(xl.sheet_names) > 1
-                for sheet in xl.sheet_names:
-                    df_sheet = pd.read_excel(xl, sheet_name=sheet)
-                    df_sheet.columns = [c.strip() for c in df_sheet.columns]
-                    if required.issubset(set(df_sheet.columns)):
-                        # If file has multiple sheets and no Section column,
-                        # derive Section (and Branch) from the sheet name
-                        if multi_sheet and "Section" not in df_sheet.columns:
-                            import re as _re
-                            m = _re.search(r"\b([A-Z])\s*$", sheet.strip())
-                            df_sheet["Section"] = m.group(1) if m else sheet.strip()
-                        if multi_sheet and "Branch" not in df_sheet.columns:
-                            # Use everything before the trailing letter as branch, default CSIT
-                            branch_part = _re.sub(r"\s*[A-Z]\s*$", "", sheet.strip()).strip()
-                            df_sheet["Branch"] = branch_part if branch_part else "CSIT"
-                        sheet_frames.append(df_sheet)
-                    else:
-                        skipped_sheets.append(sheet)
-                if not sheet_frames:
-                    st.error(
-                        f"None of the {len(xl.sheet_names)} sheet(s) contain the required columns: "
-                        f"Roll Number, Name, Attendance Percentage."
-                    )
-                    students_df = pd.DataFrame()
-                else:
-                    students_df = pd.concat(sheet_frames, ignore_index=True)
-                    if skipped_sheets:
-                        st.caption(f"ℹ️ Skipped sheets (missing required columns): {', '.join(skipped_sheets)}")
+            students_df = _load_students_from_upload(students_file, students_sqlite_table)
             # Normalise column names (for CSV path)
             if not students_df.empty:
                 students_df.columns = [c.strip() for c in students_df.columns]
@@ -525,6 +554,14 @@ def tab_generate(info: dict) -> None:
                 st.error(f"Missing columns in uploaded file: {', '.join(missing)}")
                 students_df = pd.DataFrame()
             elif not students_df.empty:
+                attendance_numeric = pd.to_numeric(students_df["Attendance Percentage"], errors="coerce")
+                invalid_attendance_count = int(attendance_numeric.isna().sum())
+                if invalid_attendance_count > 0:
+                    st.warning(
+                        f"{invalid_attendance_count} students had unparseable attendance and were excluded."
+                    )
+                students_df = students_df[attendance_numeric.notna()].copy()
+                students_df["Attendance Percentage"] = attendance_numeric[attendance_numeric.notna()].astype(float)
                 students_df = students_df.drop_duplicates(subset=["Roll Number"], keep="first")
                 students_df = students_df.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
                 sections = students_df["Section"].nunique() if "Section" in students_df.columns else None
@@ -554,6 +591,37 @@ def tab_generate(info: dict) -> None:
     # ── 2. Add Rooms ──────────────────────────────────────────────────────────
     st.subheader("2. Add Rooms")
 
+    rooms_method = st.radio(
+        "Room input method",
+        options=["Add manually", "Upload rooms file"],
+        horizontal=True,
+    )
+
+    uploaded_rooms_df = pd.DataFrame()
+    if rooms_method == "Upload rooms file":
+        st.caption("Upload rooms as CSV/Excel/SQLite with columns: Room Number, Capacity")
+        rooms_sqlite_table = st.text_input(
+            "Rooms SQLite table name (optional, default: rooms)",
+            value="rooms",
+            help="Use this only when uploading .db/.sqlite/.sqlite3 files.",
+        )
+        rooms_file = st.file_uploader(
+            "Upload rooms file (.xlsx / .xls / .csv / .db / .sqlite / .sqlite3)",
+            type=["xlsx", "xls", "csv", "db", "sqlite", "sqlite3"],
+            key="rooms_upload_gen",
+        )
+        if rooms_file is not None:
+            try:
+                uploaded_rooms_df = _load_rooms_from_upload(rooms_file, rooms_sqlite_table)
+                uploaded_rooms_df["Room Number"] = uploaded_rooms_df["Room Number"].astype(str).str.strip()
+                uploaded_rooms_df["Capacity"] = pd.to_numeric(uploaded_rooms_df["Capacity"], errors="coerce")
+                uploaded_rooms_df = uploaded_rooms_df.dropna(subset=["Capacity"])
+                uploaded_rooms_df["Capacity"] = uploaded_rooms_df["Capacity"].astype(int)
+                st.success(f"Loaded **{len(uploaded_rooms_df)}** rooms from uploaded file.")
+                st.dataframe(uploaded_rooms_df, use_container_width=True, hide_index=True)
+            except Exception as exc:
+                st.error(f"Could not read rooms file: {exc}")
+
     # ── 2a. Exam Timetable (subjects & dates for attendance sheet) ────────────
     st.markdown("**Exam Timetable** *(subjects & dates — appear as column headers in attendance sheet)*")
     with st.form("add_subject_form", clear_on_submit=True):
@@ -582,33 +650,34 @@ def tab_generate(info: dict) -> None:
     st.divider()
 
     # ── 2b. Room Number & Capacity ────────────────────────────────────────────
-    st.markdown("**Room Number & Capacity**")
-    with st.form("add_room_form", clear_on_submit=True):
-        c1, c2, c_btn = st.columns([2, 1.5, 0.8])
-        room_no_in  = c1.text_input("Room Number", placeholder="F-307")
-        capacity_in = c2.number_input("Capacity", 1, 500, 40, 1)
-        add_room    = c_btn.form_submit_button("➕ Add")
+    if rooms_method == "Add manually":
+        st.markdown("**Room Number & Capacity**")
+        with st.form("add_room_form", clear_on_submit=True):
+            c1, c2, c_btn = st.columns([2, 1.5, 0.8])
+            room_no_in  = c1.text_input("Room Number", placeholder="F-307")
+            capacity_in = c2.number_input("Capacity", 1, 500, 40, 1)
+            add_room    = c_btn.form_submit_button("➕ Add")
 
-        if add_room:
-            if not room_no_in:
-                st.error("Room Number is required.")
-            else:
-                existing = {r["Room Number"] for r in st.session_state["rooms_with_info"]}
-                if room_no_in in existing:
-                    st.error(f"Room {room_no_in} already added.")
+            if add_room:
+                if not room_no_in:
+                    st.error("Room Number is required.")
                 else:
-                    st.session_state["rooms_with_info"].append({
-                        "Room Number": room_no_in,
-                        "Capacity": int(capacity_in),
-                    })
+                    existing = {r["Room Number"] for r in st.session_state["rooms_with_info"]}
+                    if room_no_in in existing:
+                        st.error(f"Room {room_no_in} already added.")
+                    else:
+                        st.session_state["rooms_with_info"].append({
+                            "Room Number": room_no_in,
+                            "Capacity": int(capacity_in),
+                        })
 
-    if st.session_state["rooms_with_info"]:
-        rooms_display = pd.DataFrame(st.session_state["rooms_with_info"])
-        col_tbl, col_del = st.columns([0.95, 0.05])
-        col_tbl.dataframe(rooms_display, use_container_width=True, hide_index=True)
-        if col_del.button("🗑️", key="del_rooms", help="Clear all rooms"):
-            st.session_state["rooms_with_info"] = []
-            st.rerun()
+        if st.session_state["rooms_with_info"]:
+            rooms_display = pd.DataFrame(st.session_state["rooms_with_info"])
+            col_tbl, col_del = st.columns([0.95, 0.05])
+            col_tbl.dataframe(rooms_display, use_container_width=True, hide_index=True)
+            if col_del.button("🗑️", key="del_rooms", help="Clear all rooms"):
+                st.session_state["rooms_with_info"] = []
+                st.rerun()
 
     st.divider()
 
@@ -624,7 +693,12 @@ def tab_generate(info: dict) -> None:
     if not students_df.empty:
         eligible_count   = int((pd.to_numeric(students_df["Attendance Percentage"], errors="coerce") >= attendance_cutoff).sum())
         debarred_count   = len(students_df) - eligible_count
-        total_capacity   = sum(r["Capacity"] for r in st.session_state["rooms_with_info"])
+        active_rooms = (
+            uploaded_rooms_df.to_dict("records")
+            if rooms_method == "Upload rooms file" and not uploaded_rooms_df.empty
+            else st.session_state["rooms_with_info"]
+        )
+        total_capacity   = sum(int(r["Capacity"]) for r in active_rooms)
         seats_needed     = eligible_count
 
         sm1, sm2, sm3 = st.columns(3)
@@ -632,7 +706,7 @@ def tab_generate(info: dict) -> None:
         sm2.metric("Debarred Students", debarred_count)
         sm3.metric("Total Room Capacity", total_capacity if total_capacity else "—")
 
-        if st.session_state["rooms_with_info"]:
+        if active_rooms:
             spare = total_capacity - seats_needed
             if spare >= 0:
                 st.success(f"✅ Rooms sufficient — {seats_needed} students fit with **{spare} seats spare**.")
@@ -655,17 +729,24 @@ def tab_generate(info: dict) -> None:
     if students_df.empty:
         st.error("Upload a valid students file first.")
         return
-    if not st.session_state["rooms_with_info"]:
+    active_rooms = (
+        uploaded_rooms_df.to_dict("records")
+        if rooms_method == "Upload rooms file" and not uploaded_rooms_df.empty
+        else st.session_state["rooms_with_info"]
+    )
+    if not active_rooms:
         st.error("Add at least one room before generating.")
         return
 
-    rooms_with_info = st.session_state["rooms_with_info"]
+    rooms_with_info = active_rooms
     rooms_df = pd.DataFrame([{"Room Number": r["Room Number"], "Capacity": r["Capacity"]}
                               for r in rooms_with_info])
     exam_subjects = st.session_state["exam_subjects"]
 
+    _cleanup_old_web_runs()
+
     run_id = uuid4().hex[:8]
-    base_dir   = Path("web_runs") / run_id
+    base_dir   = WEB_RUNS_DIR / run_id
     input_dir  = base_dir / "input"
     output_dir = base_dir / "output"
     input_dir.mkdir(parents=True, exist_ok=True)
@@ -778,22 +859,24 @@ def tab_generate(info: dict) -> None:
         use_container_width=True,
     )
 
-    # Combined all-in-one workbook
-    combined_bytes = _merge_workbooks(
+    # Combined all-in-one archive
+    combined_bytes = _bundle_reports_zip(
         [sirt_seating_path, sirt_debarred_path, sirt_att_path],
-        ["Seating", "Debarred", "Attendance"],
+        ["SIRT_Main_Seating.xlsx", "SIRT_Debarred_List.xlsx", "SIRT_Attendance_Sheets.xlsx"],
     )
     st.download_button(
-        "⬇ Download All in One File",
+        "⬇ Download All Reports (.zip)",
         data=combined_bytes,
-        file_name="SIRT_All_Reports.xlsx",
-        mime=XLSX_MIME,
+        file_name="SIRT_All_Reports.zip",
+        mime=ZIP_MIME,
         use_container_width=True,
         type="primary",
     )
 
 
 def main() -> None:
+    _cleanup_old_web_runs()
+
     st.set_page_config(
         page_title="SIRT Exam Seating System",
         page_icon="🪑",
@@ -801,8 +884,16 @@ def main() -> None:
     )
     st.title("SIRT — Automatic Exam Seating Arrangement")
 
-    info = _sidebar_institute_info()
-    tab_generate(info)
+    info = sidebar_institute_info()
+    tab_convert_view, tab_generate_view = st.tabs([
+        "📂 Step 1 — Convert Workbook",
+        "🪑 Step 2 — Generate Plan",
+    ])
+
+    with tab_convert_view:
+        render_tab_convert(tab_convert)
+    with tab_generate_view:
+        render_tab_generate(lambda: tab_generate(info))
 
 
 if __name__ == "__main__":

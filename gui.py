@@ -38,11 +38,11 @@ class SeatingApp(tk.Tk):
         ttk.Button(tpl_frame, text="Download Students Template", command=self._save_students_template).pack(side=tk.LEFT, padx=(10, 4))
         ttk.Button(tpl_frame, text="Download Rooms Template", command=self._save_rooms_template).pack(side=tk.LEFT, padx=4)
 
-        ttk.Label(frame, text="Students File (CSV/Excel)").grid(row=1, column=0, sticky="w")
+        ttk.Label(frame, text="Students File (CSV/Excel/SQLite)").grid(row=1, column=0, sticky="w")
         ttk.Entry(frame, textvariable=self.students_path, width=60).grid(row=2, column=0, sticky="we")
         ttk.Button(frame, text="Browse", command=self._browse_students).grid(row=2, column=1, padx=8)
 
-        ttk.Label(frame, text="Rooms File (CSV/Excel)").grid(row=3, column=0, sticky="w", pady=(12, 0))
+        ttk.Label(frame, text="Rooms File (CSV/Excel/SQLite)").grid(row=3, column=0, sticky="w", pady=(12, 0))
         ttk.Entry(frame, textvariable=self.rooms_path, width=60).grid(row=4, column=0, sticky="we")
         ttk.Button(frame, text="Browse", command=self._browse_rooms).grid(row=4, column=1, padx=8)
 
@@ -114,14 +114,20 @@ class SeatingApp(tk.Tk):
 
     def _browse_students(self) -> None:
         path = filedialog.askopenfilename(
-            filetypes=[("CSV/Excel", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
+            filetypes=[
+                ("CSV/Excel/SQLite", "*.csv *.xlsx *.xls *.db *.sqlite *.sqlite3"),
+                ("All files", "*.*"),
+            ]
         )
         if path:
             self.students_path.set(path)
 
     def _browse_rooms(self) -> None:
         path = filedialog.askopenfilename(
-            filetypes=[("CSV/Excel", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
+            filetypes=[
+                ("CSV/Excel/SQLite", "*.csv *.xlsx *.xls *.db *.sqlite *.sqlite3"),
+                ("All files", "*.*"),
+            ]
         )
         if path:
             self.rooms_path.set(path)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from typing import Dict
 
 import pandas as pd
@@ -14,19 +15,61 @@ def _normalized_key(value: str) -> str:
     return "".join(ch for ch in str(value).strip().lower() if ch.isalnum())
 
 
-def _read_table(file_path: str | Path) -> pd.DataFrame:
-    path = Path(file_path)
+def _split_sqlite_spec(file_path: str | Path) -> tuple[Path, str | None]:
+    """Support SQLite spec in the form: path/to/file.db::table_name."""
+    text = str(file_path)
+    if "::" not in text:
+        return Path(text), None
+
+    db_path, table_name = text.split("::", 1)
+    table_name = table_name.strip() or None
+    return Path(db_path), table_name
+
+
+def _read_sqlite_table(db_path: Path, table_name: str) -> pd.DataFrame:
+    try:
+        with sqlite3.connect(db_path) as conn:
+            tables = pd.read_sql_query(
+                "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name", conn
+            )
+            available_tables = tables["name"].astype(str).tolist()
+            if table_name not in available_tables:
+                raise DataValidationError(
+                    f"Table '{table_name}' not found in {db_path.name}. "
+                    f"Available tables: {available_tables or 'none'}"
+                )
+            return pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+    except sqlite3.Error as exc:
+        raise DataValidationError(f"Failed to read SQLite database {db_path}: {exc}") from exc
+
+
+def _read_table(file_path: str | Path, default_sqlite_table: str | None = None) -> pd.DataFrame:
+    path, sqlite_table = _split_sqlite_spec(file_path)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
     suffix = path.suffix.lower()
+    if sqlite_table and suffix not in {".db", ".sqlite", ".sqlite3"}:
+        raise DataValidationError(
+            f"Table specifier is only supported for SQLite files: {path.name}"
+        )
+
     if suffix == ".csv":
         return pd.read_csv(path)
     if suffix in {".xlsx", ".xls"}:
         return pd.read_excel(path)
+    if suffix in {".db", ".sqlite", ".sqlite3"}:
+        table_name = sqlite_table or default_sqlite_table
+        if not table_name:
+            raise DataValidationError(
+                "SQLite input requires a table name. "
+                "Use path::table_name or provide a default table."
+            )
+        return _read_sqlite_table(path, table_name)
 
     raise DataValidationError(
-        f"Unsupported file format for {path.name}. Use CSV or Excel (.xlsx/.xls)."
+        f"Unsupported file format for {path.name}. "
+        "Use CSV, Excel (.xlsx/.xls), or SQLite (.db/.sqlite/.sqlite3)."
     )
 
 
@@ -45,7 +88,7 @@ def _rename_columns(df: pd.DataFrame, expected_map: Dict[str, str]) -> pd.DataFr
 
 
 def load_students(file_path: str | Path) -> pd.DataFrame:
-    raw = _read_table(file_path)
+    raw = _read_table(file_path, default_sqlite_table="students")
     expected = {
         _normalized_key("Roll Number"): "Roll Number",
         _normalized_key("Name"): "Name",
@@ -94,7 +137,7 @@ def load_students(file_path: str | Path) -> pd.DataFrame:
 
 
 def load_rooms(file_path: str | Path) -> pd.DataFrame:
-    raw = _read_table(file_path)
+    raw = _read_table(file_path, default_sqlite_table="rooms")
     expected = {
         _normalized_key("Room Number"): "Room Number",
         _normalized_key("Capacity"): "Capacity",

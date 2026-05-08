@@ -12,6 +12,7 @@ A complete Python-based system to automate exam seating arrangement using studen
 ## Features
 
 - Reads students and rooms from CSV or Excel files.
+- Reads students and rooms from SQLite databases (`.db`, `.sqlite`, `.sqlite3`).
 - Validates input data for missing values and wrong formats.
 - Filters students using attendance cutoff.
 - Creates separate not-eligible list.
@@ -37,12 +38,29 @@ Required columns:
 - `Name`
 - `Attendance Percentage`
 
+### Students source (SQLite)
+
+- Default table name: `students`
+- Required columns:
+  - `Roll Number`
+  - `Name`
+  - `Attendance Percentage`
+- Custom table syntax: `path/to/file.db::your_students_table`
+
 ### Rooms file (CSV/Excel)
 
 Required columns:
 
 - `Room Number`
 - `Capacity`
+
+### Rooms source (SQLite)
+
+- Default table name: `rooms`
+- Required columns:
+  - `Room Number`
+  - `Capacity`
+- Custom table syntax: `path/to/file.db::your_rooms_table`
 
 ## Installation
 
