@@ -299,13 +299,19 @@ def render_tab_generate(info: dict) -> None:
             else st.session_state["rooms_with_info"]
         )
         total_capacity = sum(int(r["Capacity"]) for r in active_rooms)
+        effective_capacity = (
+            sum((int(r["Capacity"]) + 1) // 2 for r in active_rooms)
+            if alt_seats
+            else total_capacity
+        )
 
         sm1, sm2, sm3 = st.columns(3)
         sm1.metric("Eligible", eligible_count)
         sm2.metric("Debarred", len(students_df) - eligible_count)
-        sm3.metric("Total Room Capacity", total_capacity if total_capacity else "-")
+        capacity_label = "Effective Capacity (Alternate Seats)" if alt_seats else "Total Room Capacity"
+        sm3.metric(capacity_label, effective_capacity if effective_capacity else "-")
 
-        rooms_ok = bool(active_rooms) and total_capacity >= eligible_count
+        rooms_ok = bool(active_rooms) and effective_capacity >= eligible_count
     else:
         rooms_ok = False
 
