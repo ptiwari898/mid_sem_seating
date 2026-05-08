@@ -153,3 +153,31 @@ def test_shuffle_reproducibility(sample_students_rooms) -> None:
     assert order_a["Roll Number"].tolist() == order_b["Roll Number"].tolist()
     assert order_a["Roll Number"].tolist() != order_c["Roll Number"].tolist()
     assert set(alloc_a.keys()) == {"F-307", "F-308"}
+
+
+def test_generates_documented_text_outputs(sample_students_rooms, tmp_path: Path) -> None:
+    students, rooms = sample_students_rooms
+    students_path, rooms_path, output_dir = _write_inputs(tmp_path, students, rooms)
+
+    result = run_seating_system(
+        SeatingConfig(
+            students_file=str(students_path),
+            rooms_file=str(rooms_path),
+            attendance_cutoff=40.0,
+            output_dir=str(output_dir),
+        )
+    )
+
+    expected = {
+        "room_wise_seating_plan.txt",
+        "not_eligible_students.txt",
+        "attendance_sheet.txt",
+        "summary.txt",
+        "exam_seating_output.xlsx",
+    }
+
+    generated_names = {Path(path).name for path in result.generated_files}
+    assert expected.issubset(generated_names)
+
+    for name in expected:
+        assert (output_dir / name).exists()

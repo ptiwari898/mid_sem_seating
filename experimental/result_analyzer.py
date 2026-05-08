@@ -156,12 +156,21 @@ class ResultDatabase:
         conn.commit()
 
     def add_attendance(self, student_id: int, status: str):
-        """Add attendance status for a student. Status: 'Present' or 'Absent'."""
+        """Add attendance status for a student.
+
+        Accepted statuses are PRESENT and ABSENT (case-insensitive input).
+        """
+        normalized_status = str(status).strip().upper()
+        if normalized_status not in {"PRESENT", "ABSENT"}:
+            raise ValueError(
+                f"Invalid attendance status '{status}'. Use PRESENT or ABSENT."
+            )
+
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO attendance (student_id, status) VALUES (?, ?)",
-            (student_id, status)
+            (student_id, normalized_status)
         )
         conn.commit()
 
@@ -246,7 +255,12 @@ class ResultDatabase:
                         pass
 
     def get_overall_statistics(self) -> Dict[str, Any]:
-        """Get overall result statistics (excluding absent students)."""
+        """Get overall result statistics (excluding absent students).
+
+        Pass policy for overall statistics:
+        - A student is counted as passed only if all recorded subject results are PASS.
+        - Students with no recorded results are treated as not passed.
+        """
         conn = self._get_connection()
         cursor = conn.cursor()
 
@@ -259,15 +273,18 @@ class ResultDatabase:
         """)
         present_students = cursor.fetchone()[0] or 0
 
-        # Students who passed (at least one passing subject)
+        # Students who passed (all recorded subjects are PASS, with at least one subject result)
         cursor.execute("""
-            SELECT COUNT(DISTINCT r.student_id) as count
-            FROM results r
-            WHERE r.status = 'Pass'
-            AND r.student_id IN (
-                SELECT s.student_id FROM students s
+            SELECT COUNT(*) as count
+            FROM (
+                SELECT r.student_id
+                FROM results r
+                JOIN students s ON s.student_id = r.student_id
                 LEFT JOIN attendance a ON s.student_id = a.student_id
                 WHERE a.status IS NULL OR a.status != 'ABSENT'
+                GROUP BY r.student_id
+                HAVING COUNT(*) > 0
+                   AND SUM(CASE WHEN UPPER(COALESCE(r.status, '')) = 'PASS' THEN 0 ELSE 1 END) = 0
             )
         """)
         passed_students = cursor.fetchone()[0] or 0
@@ -439,6 +456,7 @@ class ResultDatabase:
         cursor.execute("DELETE FROM students")
         cursor.execute("DELETE FROM subjects")
         cursor.execute("DELETE FROM faculties")
+        cursor.execute("DELETE FROM analysis_sessions")
         conn.commit()
 
     def close(self):
