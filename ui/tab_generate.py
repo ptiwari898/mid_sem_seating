@@ -135,7 +135,35 @@ def render_tab_generate(info: dict) -> None:
             st.dataframe(rooms_display, use_container_width=True, hide_index=True)
 
     st.divider()
-    st.subheader("3. Options")
+    st.subheader("3. Exam Timetable (Subject-wise and Date-wise)")
+
+    with st.form("add_subject_form", clear_on_submit=True):
+        s1, s2, s_btn = st.columns([2, 1.5, 0.8])
+        subj_in = s1.text_input("Subject", placeholder="CSIT-401 (M-III)")
+        exam_date = s2.date_input("Exam Date", key="subject_date_input")
+        add_subject = s_btn.form_submit_button("Add")
+
+        if add_subject:
+            if not subj_in.strip():
+                st.error("Subject is required.")
+            else:
+                st.session_state["exam_subjects"].append(
+                    {
+                        "subject": subj_in.strip(),
+                        "date": exam_date.strftime("%d-%b-%y"),
+                    }
+                )
+
+    if st.session_state["exam_subjects"]:
+        st.caption("These columns will be added to attendance sheets.")
+        subject_df = pd.DataFrame(st.session_state["exam_subjects"])
+        st.dataframe(subject_df, use_container_width=True, hide_index=True)
+        if st.button("Clear timetable", key="clear_subjects"):
+            st.session_state["exam_subjects"] = []
+            st.rerun()
+
+    st.divider()
+    st.subheader("4. Options")
     o1, o2, o3, o4 = st.columns(4)
     attendance_cutoff = o1.number_input("Attendance cutoff (%)", 0.0, 100.0, 40.0, 1.0)
     shuffle = o2.checkbox("Shuffle students")
