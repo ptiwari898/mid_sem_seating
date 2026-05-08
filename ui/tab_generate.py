@@ -18,7 +18,7 @@ from utils.workbook import ZIP_MIME, bundle_reports_zip
 
 
 def render_tab_generate(info: dict) -> None:
-    st.header("Step 2 - Generate Seating Plan")
+    st.header("Generate Seating Plan")
 
     if "rooms_with_info" not in st.session_state:
         st.session_state["rooms_with_info"] = []
