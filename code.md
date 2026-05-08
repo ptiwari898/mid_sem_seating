@@ -113,6 +113,32 @@ When attendance values are `"N/A"`, `"-"`, or blank, `pd.to_numeric(..., errors=
 | 9 | Task 9 |
 | 10 | Task 10 |
 
+## Additional Findings (May 2026)
+
+| Type | Finding | Impact | Recommended Action |
+|---|---|---|---|
+| Bug | CI may fail when `pytest -q` cannot import `exam_seating`. | Bare `pytest -q` may not resolve project imports in some CI environments. | Use `python -m pytest -q` in workflow and/or add root-level `conftest.py` for path bootstrap. |
+| Bug | `web_runs/` test folders are tracked in git history. | UUID run folders may include real/sensitive student output artifacts. | Untrack committed data using `git rm -r --cached web_runs/` and keep ignore rule active. |
+| Warning | Dead functions in `streamlit_app.py`. | Unused code increases maintenance noise and confusion. | Remove or relocate `_sidebar_institute_info()`, `_make_room_exam_config_template()`, and duplicate `_bundle_reports_zip()`. |
+| Warning | `ui/tab_convert.py` and `ui/tab_generate.py` are thin wrappers. | Refactor indirection exists without real logic movement. | Move full tab logic into modules or remove wrappers and call tab functions directly. |
+| Warning | `exam_seating/result_analyzer.py` appears unused. | Large unused module adds package bloat and ownership ambiguity. | Integrate as active feature or move to separate branch/module until needed. |
+| Warning | Function-local imports in `extract_timetable_from_workbook()`. | Lint/readability issues; function appears unused in current app flow. | Move `datetime` and `openpyxl` imports to top-level; decide whether to keep/remove function. |
+| Warning | `_get_session_input_dir()` can leave uploads for active sessions. | Files can persist longer than expected while session remains active. | Add session-start cleanup and/or shift to memory-first upload handling where possible. |
+| Info | `streamlit==1.35.*` is old for current date. | Potential missed fixes and compatibility/security updates. | Validate on newer Streamlit line and update pin after compatibility checks. |
+
+## Extended Task List
+
+| Status | Task | Priority | Scope | Deliverable | Acceptance Criteria |
+|---|---|---|---|---|---|
+| [x] | Task 11: Harden CI pytest invocation | P1 | Ensure CI import path resolution is stable. | Update workflow to `python -m pytest -q` and/or add `conftest.py` path bootstrap. | CI uses `python -m pytest -q` to avoid module path import failures. |
+| [x] | Task 12: Untrack committed `web_runs` artifacts | P0 | Remove generated student artifacts from repository tracking. | Untrack `web_runs/` from git index and preserve ignore behavior. | `git rm -r --cached web_runs/` applied; future generated files remain ignored. |
+| [x] | Task 13: Remove dead helper functions | P2 | Eliminate unused helpers from `streamlit_app.py`. | Delete or relocate `_sidebar_institute_info`, `_make_room_exam_config_template`, and duplicate `_bundle_reports_zip`. | Unused helper functions removed and shared zip utility reused. |
+| [x] | Task 14: Complete tab module refactor | P2 | Move real tab logic into `ui/tab_convert.py` and `ui/tab_generate.py`. | Streamlit app imports and runs tab implementations from module files directly. | Full tab logic now lives in ui modules; `streamlit_app.py` is a lightweight entrypoint. |
+| [x] | Task 15: Resolve unused `result_analyzer` module direction | P3 | Decide keep/integrate/archive strategy for `exam_seating/result_analyzer.py`. | Either wire module into product feature or move out of main path. | Implementation moved to `experimental/result_analyzer.py` with compatibility shim and ownership boundary. |
+| [x] | Task 16: Move function-local imports to top-level | P3 | Improve readability and lint consistency in extractor utilities. | Top-level imports for `datetime` and `openpyxl` in converter module. | Function-local imports removed from extractor utility. |
+| [x] | Task 17: Improve upload lifecycle handling | P2 | Reduce chance of stale per-session upload files. | Session-start cleanup or memory-first upload strategy update. | Session cleanup plus per-session latest-file retention keeps uploads bounded and predictable. |
+| [x] | Task 18: Rebaseline Streamlit version pin | P2 | Modernize dependency while preserving app compatibility. | Upgrade Streamlit pin after compatibility testing and fixups. | Streamlit pin updated to `1.44.*`, installed (`1.44.1`), and tests passed. |
+
 
 
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import re
 from pathlib import Path
 
+import openpyxl
 import pandas as pd
 
 
@@ -124,15 +126,12 @@ def extract_timetable_from_workbook(path: Path) -> list[dict]:
 
     Returns a list of dicts: [{"subject": "CSIT-601 SE", "date": "06-Apr-26"}, ...]
     """
-    import datetime as _dt
-
     xl = pd.ExcelFile(path)
     # Try each sheet; use the first one that yields timetable data
     for sheet in xl.sheet_names:
         if "debarred" in sheet.lower():
             continue
         try:
-            import openpyxl
             wb = openpyxl.load_workbook(str(path), data_only=True)
             if sheet not in wb.sheetnames:
                 continue
@@ -146,7 +145,7 @@ def extract_timetable_from_workbook(path: Path) -> list[dict]:
             date_cols = [
                 (col_idx, val)
                 for col_idx, val in enumerate(row)
-                if isinstance(val, _dt.datetime) and col_idx >= 4
+                if isinstance(val, dt.datetime) and col_idx >= 4
             ]
             if not date_cols:
                 continue
