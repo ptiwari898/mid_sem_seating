@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
 
@@ -22,6 +24,10 @@ def render_tab_generate(info: dict) -> None:
         st.session_state["rooms_with_info"] = []
     if "exam_subjects" not in st.session_state:
         st.session_state["exam_subjects"] = []
+    if "editing_subject_index" not in st.session_state:
+        st.session_state["editing_subject_index"] = None
+    if "editing_room_index" not in st.session_state:
+        st.session_state["editing_room_index"] = None
 
     st.subheader("1. Upload Students")
     st.caption("Required columns: Roll Number, Name, Attendance Percentage")
@@ -134,6 +140,72 @@ def render_tab_generate(info: dict) -> None:
             rooms_display = pd.DataFrame(st.session_state["rooms_with_info"])
             st.dataframe(rooms_display, use_container_width=True, hide_index=True)
 
+            st.markdown("Room Row Actions")
+            for idx, row in enumerate(st.session_state["rooms_with_info"]):
+                r1, r2, r3, r4, r5 = st.columns([0.5, 3, 2, 1, 1])
+                r1.write(str(idx + 1))
+                r2.write(str(row.get("Room Number", "")))
+                r3.write(str(row.get("Capacity", "")))
+
+                if r4.button("Edit", key=f"edit_room_{idx}"):
+                    st.session_state["editing_room_index"] = idx
+                    st.rerun()
+                if r5.button("Delete", key=f"delete_room_{idx}"):
+                    st.session_state["rooms_with_info"].pop(idx)
+                    if st.session_state["editing_room_index"] == idx:
+                        st.session_state["editing_room_index"] = None
+                    st.rerun()
+
+            edit_room_idx = st.session_state.get("editing_room_index")
+            if edit_room_idx is not None and 0 <= edit_room_idx < len(st.session_state["rooms_with_info"]):
+                st.markdown("Edit Selected Room")
+                current_room = st.session_state["rooms_with_info"][edit_room_idx]
+
+                with st.form("edit_room_form"):
+                    er1, er2, er3, er4 = st.columns([2, 1.5, 1, 1])
+                    edit_room_no = er1.text_input(
+                        "Room Number",
+                        value=str(current_room.get("Room Number", "")),
+                        key="edit_room_number",
+                    )
+                    edit_capacity = er2.number_input(
+                        "Capacity",
+                        min_value=1,
+                        max_value=500,
+                        value=int(current_room.get("Capacity", 40)),
+                        step=1,
+                        key="edit_room_capacity",
+                    )
+                    save_room = er3.form_submit_button("Save")
+                    cancel_room = er4.form_submit_button("Cancel")
+
+                    if save_room:
+                        if not edit_room_no.strip():
+                            st.error("Room Number is required.")
+                        else:
+                            duplicate = any(
+                                i != edit_room_idx and r.get("Room Number") == edit_room_no.strip()
+                                for i, r in enumerate(st.session_state["rooms_with_info"])
+                            )
+                            if duplicate:
+                                st.error(f"Room {edit_room_no.strip()} already exists.")
+                            else:
+                                st.session_state["rooms_with_info"][edit_room_idx] = {
+                                    "Room Number": edit_room_no.strip(),
+                                    "Capacity": int(edit_capacity),
+                                }
+                                st.session_state["editing_room_index"] = None
+                                st.rerun()
+
+                    if cancel_room:
+                        st.session_state["editing_room_index"] = None
+                        st.rerun()
+
+            if st.button("Clear all rooms", key="clear_rooms"):
+                st.session_state["rooms_with_info"] = []
+                st.session_state["editing_room_index"] = None
+                st.rerun()
+
     st.divider()
     st.subheader("3. Exam Timetable (Subject-wise and Date-wise)")
 
@@ -158,8 +230,57 @@ def render_tab_generate(info: dict) -> None:
         st.caption("These columns will be added to attendance sheets.")
         subject_df = pd.DataFrame(st.session_state["exam_subjects"])
         st.dataframe(subject_df, use_container_width=True, hide_index=True)
+
+        st.markdown("Row Actions")
+        for idx, row in enumerate(st.session_state["exam_subjects"]):
+            c1, c2, c3, c4, c5 = st.columns([0.5, 3, 2, 1, 1])
+            c1.write(str(idx + 1))
+            c2.write(row.get("subject", ""))
+            c3.write(row.get("date", ""))
+
+            if c4.button("Edit", key=f"edit_subject_{idx}"):
+                st.session_state["editing_subject_index"] = idx
+                st.rerun()
+            if c5.button("Delete", key=f"delete_subject_{idx}"):
+                st.session_state["exam_subjects"].pop(idx)
+                if st.session_state["editing_subject_index"] == idx:
+                    st.session_state["editing_subject_index"] = None
+                st.rerun()
+
+        edit_idx = st.session_state.get("editing_subject_index")
+        if edit_idx is not None and 0 <= edit_idx < len(st.session_state["exam_subjects"]):
+            st.markdown("Edit Selected Row")
+            current = st.session_state["exam_subjects"][edit_idx]
+            try:
+                current_date = datetime.strptime(current.get("date", "01-Jan-26"), "%d-%b-%y").date()
+            except ValueError:
+                current_date = datetime.today().date()
+
+            with st.form("edit_subject_form"):
+                e1, e2, e3, e4 = st.columns([2, 1.5, 1, 1])
+                edit_subject = e1.text_input("Subject", value=current.get("subject", ""), key="edit_subject_name")
+                edit_date = e2.date_input("Exam Date", value=current_date, key="edit_subject_date")
+                save_edit = e3.form_submit_button("Save")
+                cancel_edit = e4.form_submit_button("Cancel")
+
+                if save_edit:
+                    if not edit_subject.strip():
+                        st.error("Subject is required.")
+                    else:
+                        st.session_state["exam_subjects"][edit_idx] = {
+                            "subject": edit_subject.strip(),
+                            "date": edit_date.strftime("%d-%b-%y"),
+                        }
+                        st.session_state["editing_subject_index"] = None
+                        st.rerun()
+
+                if cancel_edit:
+                    st.session_state["editing_subject_index"] = None
+                    st.rerun()
+
         if st.button("Clear timetable", key="clear_subjects"):
             st.session_state["exam_subjects"] = []
+            st.session_state["editing_subject_index"] = None
             st.rerun()
 
     st.divider()
