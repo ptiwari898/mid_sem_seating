@@ -52,7 +52,7 @@ def save_uploaded(uploaded_file, target_dir: Path) -> Path:
 
 
 def load_students_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
-    path = save_uploaded(uploaded_file, get_session_input_dir())
+    path = save_uploaded(uploaded_file, get_session_input_dir() / "students")
     suffix = path.suffix.lower()
 
     if suffix in {".db", ".sqlite", ".sqlite3"}:
@@ -95,7 +95,7 @@ def load_students_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
 
 
 def load_rooms_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
-    path = save_uploaded(uploaded_file, get_session_input_dir())
+    path = save_uploaded(uploaded_file, get_session_input_dir() / "rooms")
     suffix = path.suffix.lower()
 
     if suffix in {".db", ".sqlite", ".sqlite3"}:
