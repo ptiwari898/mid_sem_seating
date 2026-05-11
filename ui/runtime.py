@@ -66,16 +66,15 @@ def load_students_from_upload(uploaded_file, sqlite_table: str) -> pd.DataFrame:
     sheet_frames = []
     required = {"Roll Number", "Name", "Attendance Percentage"}
     skipped_sheets = []
-    multi_sheet = len(xl.sheet_names) > 1
 
     for sheet in xl.sheet_names:
         df_sheet = pd.read_excel(xl, sheet_name=sheet)
         df_sheet.columns = [c.strip() for c in df_sheet.columns]
         if required.issubset(set(df_sheet.columns)):
-            if multi_sheet and "Section" not in df_sheet.columns:
+            if "Section" not in df_sheet.columns:
                 m = re.search(r"\b([A-Z])\s*$", sheet.strip())
                 df_sheet["Section"] = m.group(1) if m else sheet.strip()
-            if multi_sheet and "Branch" not in df_sheet.columns:
+            if "Branch" not in df_sheet.columns:
                 branch_part = re.sub(r"\s*[A-Z]\s*$", "", sheet.strip()).strip()
                 df_sheet["Branch"] = branch_part if branch_part else "CSIT"
             sheet_frames.append(df_sheet)
