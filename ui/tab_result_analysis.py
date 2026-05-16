@@ -71,6 +71,10 @@ def _clean_text_series(series: pd.Series) -> pd.Series:
     return cleaned.where(~cleaned.str.lower().isin({"nan", "none", "nat"}), "")
 
 
+def _section_from_sheet_name(sheet_name: str | None) -> str:
+    return (sheet_name or "").strip()
+
+
 def _numeric_with_invalid_mask(series: pd.Series) -> tuple[pd.Series, pd.Series]:
     cleaned = _clean_text_series(series)
     numeric = pd.to_numeric(series, errors="coerce")
@@ -103,6 +107,7 @@ def _write_section_sheet(
     institute: str,
     department: str,
     exam_title: str,
+    semester: str,
     section: str,
     pass_threshold: float,
     max_marks_per_subject: float,
@@ -154,11 +159,12 @@ def _write_section_sheet(
     ws.set_column(total_col, pass_fail_col, 16)
 
     # 4 merged title rows
+    section_line = f"Semester: {semester} | {section}" if semester else section
     for row_i, (text, row_h) in enumerate([
         (institute, 20),
         (department, 18),
         (exam_title, 16),
-        (section, 16),
+        (section_line, 16),
     ]):
         ws.set_row(row_i, row_h)
         ws.merge_range(row_i, 0, row_i, last_col, text, hdr_fmt)
@@ -294,6 +300,7 @@ def _build_section_excel(
     institute: str,
     department: str,
     exam_title: str,
+    semester: str,
     section: str,
     pass_threshold: float,
     max_marks_per_subject: float,
@@ -328,6 +335,7 @@ def _build_section_excel(
                 institute,
                 department,
                 exam_title,
+                semester,
                 section_heading,
                 pass_threshold,
                 max_marks_per_subject,
@@ -375,8 +383,8 @@ def render_tab_result_analysis() -> None:
     institute  = hi1.text_input("Institute Name", value="SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY", key="ra_institute")
     department = hi2.text_input("Department",     value="DEPARTMENT OF CSIT",                        key="ra_department")
     hi3, hi4 = st.columns(2)
-    exam_title = hi3.text_input("Exam Title",  value="I MID SEM EXAMINATION (JAN-JUN 2026)", key="ra_exam_title")
-    section    = hi4.text_input("Section",     placeholder="CSIT- 6th Sem - CSIT--A",        key="ra_section")
+    exam_title = hi3.text_input("Exam Title", value="I MID SEM EXAMINATION (JAN-JUN 2026)", key="ra_exam_title")
+    semester = hi4.text_input("Sem", value="6th Sem", key="ra_semester")
 
     # ── File Upload ────────────────────────────────────────────────────────────
     uploaded = st.file_uploader(
@@ -390,10 +398,15 @@ def render_tab_result_analysis() -> None:
         return
 
     selected_sheet = None
+    section = ""
     if uploaded.name.lower().endswith((".xlsx", ".xls")):
         xl = pd.ExcelFile(uploaded)
         selected_sheet = st.selectbox("Select sheet", xl.sheet_names, key="result_analysis_sheet")
+        section = _section_from_sheet_name(selected_sheet)
+        st.text_input("Section (from sheet name)", value=section, disabled=True, key="ra_section_from_sheet")
         uploaded.seek(0)
+    else:
+        section = st.text_input("Section", placeholder="e.g. CSIT-A", key="ra_section_manual")
 
     source_key = f"{uploaded.name}::{selected_sheet or ''}"
     previous_source_key = st.session_state.get("ra_source_key")
@@ -581,7 +594,7 @@ def render_tab_result_analysis() -> None:
     # ── Generate styled section-wise Excel ────────────────────────────────────
     section_excel = _build_section_excel(
         work, subjects,
-        institute.strip(), department.strip(), exam_title.strip(), section.strip(),
+        institute.strip(), department.strip(), exam_title.strip(), semester.strip(), section.strip(),
         pass_threshold,
         max_marks_per_subject,
     )

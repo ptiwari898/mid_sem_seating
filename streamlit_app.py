@@ -19,6 +19,7 @@ from uuid import uuid4
 import pandas as pd
 import streamlit as st
 
+<<<<<<< HEAD
 from convert_result_to_students import convert_result_file
 from exam_seating.database import (
     delete_run,
@@ -1146,12 +1147,28 @@ def tab_history() -> None:
 
 
 def main() -> None:
+=======
+from teacher_portal.db import init_db
+from ui.runtime import cleanup_old_web_runs
+from ui.sidebar import sidebar_institute_info
+from ui.tab_admin_portal import render_tab_admin_portal
+from ui.tab_generate import render_tab_generate
+from ui.tab_result_analysis import render_tab_result_analysis
+from ui.tab_teacher_portal import render_tab_teacher_portal
+
+
+def main() -> None:
+    cleanup_old_web_runs()
+    init_db()
+
+>>>>>>> 37f374730bee3cd413bd3c465b99a954e2a06894
     st.set_page_config(
         page_title="SIRT Exam Seating System",
         page_icon="🪑",
         layout="wide",
     )
 
+<<<<<<< HEAD
     st.markdown(_CSS, unsafe_allow_html=True)
     _hero_banner()
 
@@ -1168,6 +1185,24 @@ def main() -> None:
         tab_generate(info)
     with tab3:
         tab_history()
+=======
+    info = sidebar_institute_info()
+    tab_seating, tab_result, tab_admin, tab_teacher = st.tabs([
+        "Seating Plan",
+        "Result Analysis",
+        "Admin Portal",
+        "Teacher Portal",
+    ])
+
+    with tab_seating:
+        render_tab_generate(info)
+    with tab_result:
+        render_tab_result_analysis()
+    with tab_admin:
+        render_tab_admin_portal()
+    with tab_teacher:
+        render_tab_teacher_portal()
+>>>>>>> 37f374730bee3cd413bd3c465b99a954e2a06894
 
 
 if __name__ == "__main__":
