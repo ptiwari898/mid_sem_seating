@@ -102,42 +102,92 @@ def export_excel(
     target = output_dir / "exam_seating_output.xlsx"
 
     with pd.ExcelWriter(target, engine="xlsxwriter") as writer:
+        wb = writer.book
+        
+        # Define formats without formulas
+        header_fmt = wb.add_format({
+            "bold": True,
+            "bg_color": "#D9E1F2",
+            "border": 1,
+            "align": "center",
+            "valign": "vcenter"
+        })
+        data_fmt = wb.add_format({
+            "border": 1,
+            "align": "left",
+            "valign": "vcenter"
+        })
+        center_fmt = wb.add_format({
+            "border": 1,
+            "align": "center",
+            "valign": "vcenter"
+        })
+        
         for room_no, room_df in room_allocations.items():
             sheet_name = _safe_sheet_name(f"Room_{room_no}")
-            room_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            ws = wb.add_worksheet(sheet_name)
+            
+            # Write headers
+            for col, col_name in enumerate(room_df.columns):
+                ws.write(0, col, col_name, header_fmt)
+            
+            # Write data
+            for row_idx, (_, row) in enumerate(room_df.iterrows(), start=1):
+                for col_idx, col_name in enumerate(room_df.columns):
+                    value = row[col_name]
+                    # Convert NaN/None to empty string
+                    if pd.isna(value):
+                        value = ""
+                    ws.write(row_idx, col_idx, value, data_fmt)
 
-            attendance_df = room_df[["Roll Number", "Name"]].copy()
-            attendance_df["Signature"] = ""
+            # Create attendance sheet
             attendance_sheet_name = _safe_sheet_name(f"Att_{room_no}")
-            attendance_df.to_excel(writer, sheet_name=attendance_sheet_name, index=False)
+            att_ws = wb.add_worksheet(attendance_sheet_name)
+            
+            # Write headers for attendance sheet
+            att_cols = ["Roll Number", "Name", "Signature"]
+            for col, col_name in enumerate(att_cols):
+                att_ws.write(0, col, col_name, header_fmt)
+            
+            # Write attendance data
+            for row_idx, (_, row) in enumerate(room_df.iterrows(), start=1):
+                att_ws.write(row_idx, 0, str(row["Roll Number"]), data_fmt)
+                att_ws.write(row_idx, 1, str(row["Name"]), data_fmt)
+                att_ws.write(row_idx, 2, "", data_fmt)  # Empty signature field
 
-        not_eligible.to_excel(writer, sheet_name="Not_Eligible", index=False)
+        # Write Not Eligible sheet
+        not_elig_ws = wb.add_worksheet("Not_Eligible")
+        not_elig_cols = not_eligible.columns.tolist()
+        
+        for col, col_name in enumerate(not_elig_cols):
+            not_elig_ws.write(0, col, col_name, header_fmt)
+        
+        for row_idx, (_, row) in enumerate(not_eligible.iterrows(), start=1):
+            for col_idx, col_name in enumerate(not_elig_cols):
+                value = row[col_name]
+                if pd.isna(value):
+                    value = ""
+                not_elig_ws.write(row_idx, col_idx, value, data_fmt)
 
-        summary_df = pd.DataFrame(
-            {
-                "Metric": [
-                    "Total Students",
-                    "Eligible Students",
-                    "Not Eligible Students",
-                    "Allocated Students",
-                    "Unallocated Students",
-                    "Room Count",
-                    "Total Capacity",
-                    "Effective Capacity",
-                ],
-                "Value": [
-                    summary.total_students,
-                    summary.eligible_students,
-                    summary.not_eligible_students,
-                    summary.allocated_students,
-                    summary.unallocated_students,
-                    summary.room_count,
-                    summary.total_capacity,
-                    summary.effective_capacity,
-                ],
-            }
-        )
-        summary_df.to_excel(writer, sheet_name="Summary", index=False)
+        # Write Summary sheet
+        summary_ws = wb.add_worksheet("Summary")
+        summary_ws.write(0, 0, "Metric", header_fmt)
+        summary_ws.write(0, 1, "Value", header_fmt)
+        
+        summary_data = [
+            ("Total Students", summary.total_students),
+            ("Eligible Students", summary.eligible_students),
+            ("Not Eligible Students", summary.not_eligible_students),
+            ("Allocated Students", summary.allocated_students),
+            ("Unallocated Students", summary.unallocated_students),
+            ("Room Count", summary.room_count),
+            ("Total Capacity", summary.total_capacity),
+            ("Effective Capacity", summary.effective_capacity),
+        ]
+        
+        for row_idx, (metric, value) in enumerate(summary_data, start=1):
+            summary_ws.write(row_idx, 0, metric, data_fmt)
+            summary_ws.write(row_idx, 1, value, center_fmt)
 
     return target
 

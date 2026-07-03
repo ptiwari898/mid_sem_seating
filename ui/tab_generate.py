@@ -121,7 +121,7 @@ def render_tab_generate(info: dict) -> None:
         with st.form("add_room_form", clear_on_submit=True):
             c1, c2, c_btn = st.columns([2, 1.5, 0.8])
             room_no_in = c1.text_input("Room Number", placeholder="F-307")
-            capacity_in = c2.number_input("Capacity", 1, 500, 40, 1)
+            capacity_in = c2.number_input("Capacity", 1, 10000, 40, 1)
             add_room = c_btn.form_submit_button("Add")
 
             if add_room:
@@ -171,7 +171,7 @@ def render_tab_generate(info: dict) -> None:
                     edit_capacity = er2.number_input(
                         "Capacity",
                         min_value=1,
-                        max_value=500,
+                        max_value=10000,
                         value=int(current_room.get("Capacity", 40)),
                         step=1,
                         key="edit_room_capacity",
