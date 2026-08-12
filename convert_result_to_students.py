@@ -55,8 +55,8 @@ def _parse_section_branch(sheet_name: str) -> tuple[str, str]:
     return branch, section
 
 
-def _extract_from_sheet(path: Path, sheet: str) -> pd.DataFrame:
-    raw = pd.read_excel(path, sheet_name=sheet, header=None)
+def _extract_from_sheet(xl: pd.ExcelFile, sheet: str) -> pd.DataFrame:
+    raw = pd.read_excel(xl, sheet_name=sheet, header=None)
     branch, section = _parse_section_branch(sheet)
 
     for header_idx in range(min(30, len(raw))):
@@ -88,11 +88,10 @@ def _extract_from_sheet(path: Path, sheet: str) -> pd.DataFrame:
     return pd.DataFrame(columns=["Roll Number", "Name", "Attendance Percentage", "Branch", "Section"])
 
 
-def extract_rooms_from_workbook(path: Path) -> pd.DataFrame:
+def extract_rooms_from_workbook(xl: pd.ExcelFile) -> pd.DataFrame:
     """Try to extract Room Number and Capacity from any sheet in the workbook."""
-    xl = pd.ExcelFile(path)
     for sheet in xl.sheet_names:
-        raw = pd.read_excel(path, sheet_name=sheet, header=None)
+        raw = pd.read_excel(xl, sheet_name=sheet, header=None)
         for header_idx in range(min(30, len(raw))):
             header = [str(x).strip() for x in raw.iloc[header_idx].tolist()]
             data = raw.iloc[header_idx + 1 :].copy()
@@ -126,15 +125,16 @@ def extract_timetable_from_workbook(path: Path) -> list[dict]:
 
     Returns a list of dicts: [{"subject": "CSIT-601 SE", "date": "06-Apr-26"}, ...]
     """
-    xl = pd.ExcelFile(path)
+    try:
+        wb = openpyxl.load_workbook(str(path), data_only=True)
+    except Exception:
+        return []
+
     # Try each sheet; use the first one that yields timetable data
-    for sheet in xl.sheet_names:
+    for sheet in wb.sheetnames:
         if "debarred" in sheet.lower():
             continue
         try:
-            wb = openpyxl.load_workbook(str(path), data_only=True)
-            if sheet not in wb.sheetnames:
-                continue
             ws = wb[sheet]
             rows = list(ws.iter_rows(min_row=1, max_row=20, values_only=True))
         except Exception:
@@ -186,7 +186,7 @@ def convert_result_file(
     for sheet in target_sheets:
         if sheet not in xl.sheet_names:
             continue
-        extracted = _extract_from_sheet(path, sheet)
+        extracted = _extract_from_sheet(xl, sheet)
         if not extracted.empty:
             frames.append(extracted)
 
@@ -196,7 +196,7 @@ def convert_result_file(
         students = students.drop_duplicates(subset=["Roll Number"], keep="first")
         students = students.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
 
-    rooms = extract_rooms_from_workbook(path)
+    rooms = extract_rooms_from_workbook(xl)
     return students, rooms
 
 
