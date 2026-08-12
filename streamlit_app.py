@@ -6,18 +6,15 @@ from __future__ import annotations
 
 import streamlit as st
 
-from teacher_portal.db import init_db
 from ui.runtime import cleanup_old_web_runs
 from ui.sidebar import sidebar_institute_info
-from ui.tab_admin_portal import render_tab_admin_portal
 from ui.tab_generate import render_tab_generate
 from ui.tab_result_analysis import render_tab_result_analysis
-from ui.tab_teacher_portal import render_tab_teacher_portal
+from ui.tab_data_management import render_tab_data_management
 
 
 def main() -> None:
     cleanup_old_web_runs()
-    init_db()
 
     st.set_page_config(
         page_title="SIRT Exam Seating System",
@@ -26,21 +23,20 @@ def main() -> None:
     )
 
     info = sidebar_institute_info()
-    tab_seating, tab_result, tab_admin, tab_teacher = st.tabs([
+    st.caption(f"• {info['institute']}  •  {info['department']}")
+
+    tab1, tab2, tab3 = st.tabs([
         "Seating Plan",
         "Result Analysis",
-        "Admin Portal",
-        "Teacher Portal",
+        "Data & Marks Management",
     ])
 
-    with tab_seating:
+    with tab1:
         render_tab_generate(info)
-    with tab_result:
+    with tab2:
         render_tab_result_analysis()
-    with tab_admin:
-        render_tab_admin_portal()
-    with tab_teacher:
-        render_tab_teacher_portal()
+    with tab3:
+        render_tab_data_management()
 
 
 if __name__ == "__main__":

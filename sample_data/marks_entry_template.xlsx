@@ -1,0 +1,21 @@
+from exam_seating.ui.templates import df_to_excel_bytes
+
+# Sample marks entry data - what faculty sees after PIN authentication
+df = pd.DataFrame(
+    [
+        {"Roll Number": "0133CI231001", "Name": "AARBI DHAKAD", "Marks": 25, "Absent": False},
+        {"Roll Number": "0133CI231002", "Name": "ABHISHEK KUMAR", "Marks": 30, "Absent": False},
+        {"Roll Number": "0133CI231003", "Name": "ADITYA KUMAR SHAH", "Marks": 20, "Absent": False},
+        {"Roll Number": "0133CI231004", "Name": "AMANJEET SINGH", "Marks": 15, "Absent": True},
+        {"Roll Number": "0133CI231005", "Name": "ANJALI SHRIVASTAVA", "Marks": 28, "Absent": False},
+        {"Roll Number": "0133CI231006", "Name": "ARJUN DUBEY", "Marks": 22, "Absent": False},
+        {"Roll Number": "0133CI231007", "Name": "AYUSHI PATEL", "Marks": 18, "Absent": False},
+        {"Roll Number": "0133CI231008", "Name": "BHAVESH SHARMA", "Marks": 26, "Absent": False},
+        {"Roll Number": "0133CI231009", "Name": "CHIRAG VERMA", "Marks": 12, "Absent": True},
+        {"Roll Number": "0133CI231010", "Name": "DEEPAK NEGI", "Marks": 24, "Absent": False},
+    ]
+)
+bytes_data = df_to_excel_bytes(df)
+with open("sample_data/marks_entry_template.xlsx", "wb") as f:
+    f.write(bytes_data)
+print("Created marks_entry_template.xlsx")
