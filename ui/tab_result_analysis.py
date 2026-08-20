@@ -144,61 +144,115 @@ def render_tab_result_analysis() -> None:
         use_container_width=True,
     )
 
-    # ── Header Information ─────────────────────────────────────────────────────
-    st.subheader("Header Information")
-    hi1, hi2 = st.columns(2)
-    institute  = hi1.text_input("Institute Name", value="SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY", key="ra_institute")
-    department = hi2.text_input("Department",     value="DEPARTMENT OF CSIT",                        key="ra_department")
-    hi3, hi4 = st.columns(2)
-    exam_title = hi3.text_input("Exam Title",  value="I MID SEM EXAMINATION (JAN-JUN 2026)", key="ra_exam_title")
-    section    = hi4.text_input("Section",     placeholder="CSIT- 6th Sem - CSIT--A",        key="ra_section")
-
-    # ── File Upload ────────────────────────────────────────────────────────────
-    uploaded = st.file_uploader(
-        "Upload result file (.xlsx / .xls / .csv)",
-        type=["xlsx", "xls", "csv"],
-        key="result_analysis_upload",
+    # ── Data Source Selection ─────────────────────────────────────────────────
+    st.subheader("Data Source")
+    use_saved_data = st.checkbox(
+        "Use saved student data from Data & Marks Management",
+        help="Toggle to use student data saved in the Data & Marks Management tab instead of uploading a file"
     )
 
-    if uploaded is None:
-        st.info("Upload a file to continue.")
-        return
+    # Initialize session state for data management functions if needed
+    if "saved_students" not in st.session_state:
+        st.session_state["saved_students"] = pd.DataFrame()
 
-    selected_sheet = None
-    if uploaded.name.lower().endswith((".xlsx", ".xls")):
-        xl = pd.ExcelFile(uploaded)
-        selected_sheet = st.selectbox("Select sheet", xl.sheet_names, key="result_analysis_sheet")
-        uploaded.seek(0)
+    # Handle data loading based on selection
+    if use_saved_data:
+        # Use saved student data
+        df = st.session_state["saved_students"].copy()
+        if df.empty:
+            st.warning("⚠️ No student data saved yet. Please go to Data & Marks Management tab to save student data first.")
+            st.info("💡 Save your student data in the Data & Marks Management tab, then return here and toggle this option.")
+            return
+        else:
+            # Validate required columns
+            required_cols = {"Roll Number", "Name"}
+            if not required_cols.issubset(set(df.columns)):
+                missing = required_cols - set(df.columns)
+                st.error(f"❌ Saved student data missing required columns: {', '.join(missing)}")
+                st.info("Please re-save valid student data in the Data & Marks Management tab.")
+                return
+            else:
+                st.success(f"✅ Using saved student data: {len(df)} students loaded")
+                st.dataframe(df.head(10), use_container_width=True)
+                # Normalize column names for consistency
+                df.columns = [c.strip() for c in df.columns]
 
-    try:
-        df = _read_uploaded_table(uploaded, selected_sheet=selected_sheet)
-    except Exception as exc:
-        st.error(f"Failed to read file: {exc}")
-        return
+                # For saved data, we know the columns
+                roll_col = "Roll Number"
+                name_col = "Name"
+                # Set a flag to skip file upload processing
+                is_saved_data = True
+    else:
+        # ── File Upload ────────────────────────────────────────────────────────────
+        uploaded = st.file_uploader(
+            "Upload result file (.xlsx / .xls / .csv)",
+            type=["xlsx", "xls", "csv"],
+            key="result_analysis_upload",
+        )
 
-    if df.empty:
-        st.error("Uploaded file has no rows.")
-        return
+        if uploaded is None:
+            st.info("Upload a file to continue.")
+            return
 
-    df.columns = [str(c).strip() for c in df.columns]
-    st.subheader("Preview")
-    st.dataframe(df.head(10), use_container_width=True)
+        try:
+            df = _read_uploaded_table(uploaded)
+        except Exception:
+            st.error("Failed to read the uploaded file.")
+            return
+
+        if df.empty:
+            st.error("Uploaded file has no rows.")
+            return
+
+        df.columns = [str(c).strip() for c in df.columns]
+        st.subheader("Preview")
+        st.dataframe(df.head(10), use_container_width=True)
+
+        selected_sheet = None
+        if uploaded.name.lower().endswith((".xlsx", ".xls")):
+            xl = pd.ExcelFile(uploaded)
+            selected_sheet = st.selectbox("Select sheet", xl.sheet_names, key="result_analysis_sheet")
+            uploaded.seek(0)
+
+        try:
+            df = _read_uploaded_table(uploaded, selected_sheet=selected_sheet)
+        except Exception:
+            st.error("Failed to read the uploaded file.")
+            return
+
+        if df.empty:
+            st.error("Uploaded file has no rows.")
+            return
+
+        df.columns = [str(c).strip() for c in df.columns]
+        st.subheader("Preview (after sheet selection)")
+        st.dataframe(df.head(10), use_container_width=True)
+        # Set flag for file upload path
+        is_saved_data = False
 
     # ── Column Mapping ─────────────────────────────────────────────────────────
     st.subheader("Column Mapping")
-    detected = _detect_columns(list(df.columns))
-    all_cols  = [""] + list(df.columns)
-    cm1, cm2 = st.columns(2)
-    roll_col = cm1.selectbox(
-        "Board EnrollNo / Roll column", all_cols,
-        index=all_cols.index(detected["roll"]) if detected["roll"] in all_cols else 0,
-        key="ra_roll_col",
-    )
-    name_col = cm2.selectbox(
-        "Student Name column", all_cols,
-        index=all_cols.index(detected["name"]) if detected["name"] in all_cols else 0,
-        key="ra_name_col",
-    )
+    if use_saved_data:
+        # For saved data, we already know the columns
+        st.info("Using saved student data: Roll Number → Board EnrollNo, Name → Student Name")
+        roll_col = "Roll Number"
+        name_col = "Name"
+        all_cols = ["Roll Number", "Name"] + [c for c in df.columns if c not in ["Roll Number", "Name"]]
+    else:
+        # For uploaded files, detect columns
+        detected = _detect_columns(list(df.columns))
+        all_cols  = [""] + list(df.columns)
+        cm1, cm2 = st.columns(2)
+        roll_col = cm1.selectbox(
+            "Board EnrollNo / Roll column", all_cols,
+            index=all_cols.index(detected["roll"]) if detected["roll"] in all_cols else 0,
+            key="ra_roll_col",
+        )
+        name_col = cm2.selectbox(
+            "Student Name column", all_cols,
+            index=all_cols.index(detected["name"]) if detected["name"] in all_cols else 0,
+            key="ra_name_col",
+        )
 
     # ── Subjects ───────────────────────────────────────────────────────────────
     st.subheader("Subjects")
