@@ -38,7 +38,9 @@ def _read_sqlite_table(db_path: Path, table_name: str) -> pd.DataFrame:
                     f"Table '{table_name}' not found in {db_path.name}. "
                     f"Available tables: {available_tables or 'none'}"
                 )
-            return pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+            # Use proper identifier escaping for SQLite (double quotes are escaped by doubling them)
+            escaped_table_name = table_name.replace('"', '""')
+            return pd.read_sql_query(f'SELECT * FROM "{escaped_table_name}"', conn)
     except sqlite3.Error as exc:
         raise DataValidationError(f"Failed to read SQLite database {db_path}: {exc}") from exc
 
