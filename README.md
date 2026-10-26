@@ -26,42 +26,28 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Summary report (text)
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
-- Streamlit web app.
-- Optional marks entry: after generating a plan, tick "open marks entry" to get a PIN. Teachers enter the PIN in the Data & Marks Management tab, pick any subject and enter marks for the eligible students. Data is stored in `marks_sessions.db` (ignored by git; set `MARKS_DB_PATH` to change it). Set `ADMIN_PASSWORD` in the app secrets to let the coordinator list sessions, recover a lost PIN, download marks or delete a session.
+- Streamlit web app with three tabs: Seating Plan, Result Analysis, Data & Marks Management.
+- Institute-style Excel reports: main seating sheet, debarred list and section-wise attendance sheets.
+- Attendance written as `82`, `82%` or an Excel percent cell (0.82) is read as 82.
+- Optional PIN-based marks entry for the eligible students (see below).
+- Result Analysis from an uploaded file, saved students, or a marks-entry session.
 
-## Input Format
+## Marks Entry
 
-### Students file (CSV/Excel)
+Tick "Also open marks entry" when generating a plan to get a 6-digit PIN. Teachers enter the PIN in the
+Data & Marks Management tab, pick any subject (and section) and enter marks for the eligible students.
+The coordinator can recover the PIN, lock the marks, download marks and edit history, and back up the
+database. See [sample_data/HOW_TO_PROVIDE_DATA.md](sample_data/HOW_TO_PROVIDE_DATA.md).
 
-Required columns:
+## Configuration
 
-- `Roll Number`
-- `Name`
-- `Attendance Percentage`
+| Setting | Where | Purpose |
+|---------|-------|---------|
+| `ADMIN_PASSWORD` | Streamlit secrets | Unlocks the Coordinator panel. Not set means the panel stays disabled. |
+| `MARKS_DB_PATH` | Environment variable | Location of the marks database (default `marks_sessions.db`). |
+| `API_KEY` | Environment variable (Vercel) | Requires an `X-API-Key` header on the API endpoints. |
 
-### Students source (SQLite)
-
-- Default table name: `students`
-- Required columns:
-  - `Roll Number`
-  - `Name`
-  - `Attendance Percentage`
-- Custom table syntax: `path/to/file.db::your_students_table`
-
-### Rooms file (CSV/Excel)
-
-Required columns:
-
-- `Room Number`
-- `Capacity`
-
-### Rooms source (SQLite)
-
-- Default table name: `rooms`
-- Required columns:
-  - `Room Number`
-  - `Capacity`
-- Custom table syntax: `path/to/file.db::your_rooms_table`
+Secrets files and `*.db` files are git-ignored. Never commit them.
 
 ## Installation
 
@@ -95,7 +81,7 @@ Then open the local URL shown in terminal (usually `http://localhost:8501`) and:
 streamlit_app.py    Streamlit entry point (run.py launches it)
 gui.py              Optional Tkinter desktop app
 api/                FastAPI app deployed on Vercel
-exam_seating/       Core logic: loading, allocation, exports
+exam_seating/       Core logic: loading, allocation, exports, marks_store (SQLite)
 ui/                 Streamlit tabs and helpers
 tests/              pytest suite
 sample_data/        Example input files
@@ -120,6 +106,12 @@ Generated in output folder:
 - `summary.txt`
 - `exam_seating_output.xlsx`
 - `room_wise_seating_plan.pdf` (optional, if reportlab is installed)
+
+## Tests
+
+```bash
+python -m pytest -q
+```
 
 ## Notes
 
