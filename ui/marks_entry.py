@@ -132,6 +132,12 @@ def render_teacher_marks_entry() -> None:
         text=f"{entered} of {len(table)} students have an entry for {subject.name}",
     )
 
+    # Columns that say the same thing on every row only add noise.
+    hidden = {
+        column: None
+        for column in ("Branch", "Section")
+        if table[column].nunique() <= 1
+    }
     edited = st.data_editor(
         table,
         key=f"tm_editor_{session.id}_{subject.id}_{section}",
@@ -139,6 +145,7 @@ def render_teacher_marks_entry() -> None:
         use_container_width=True,
         disabled=True if locked else ["Roll Number", "Name", "Branch", "Section"],
         column_config={
+            **hidden,
             "Marks": st.column_config.NumberColumn(
                 "Marks", min_value=0.0, max_value=float(session.max_marks), step=0.5
             ),

@@ -90,6 +90,12 @@ sample_data/        Example input files
 docs/               Extra documentation
 ```
 
+## Look and Feel
+
+Colours, radii and heading sizes are set in `.streamlit/config.toml` (one blue accent per light and dark mode);
+`ui/style.py` adds the rest and documents the rules: one accent, 8px controls, 12px cards, Material icons
+instead of emoji, and a narrow centred layout for the teachers' and admin password pages.
+
 ## API Deployment Notes
 
 - The FastAPI app in `api/index.py` is deployed on Vercel using `requirements-prod.txt`.

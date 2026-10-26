@@ -9,6 +9,7 @@ import streamlit as st
 
 from exam_seating import marks_store
 from ui.marks_entry import lockout_seconds_left
+from ui.style import narrow_page
 
 
 def _unlocked() -> bool:
@@ -20,8 +21,12 @@ def _unlocked() -> bool:
     if st.session_state.get("coordinator_ok"):
         return True
 
-    typed = st.text_input("Admin password", type="password", key="co_password")
-    if st.button("Unlock", key="co_unlock"):
+    narrow_page(560)
+    st.caption("Enter the admin password to see plans and marks.")
+    with st.form("co_form"):
+        typed = st.text_input("Admin password", type="password", key="co_password")
+        submitted = st.form_submit_button("Unlock", type="primary", use_container_width=True)
+    if submitted:
         wait = lockout_seconds_left(
             st.session_state.get("co_failed", 0), st.session_state.get("co_last_failure", 0.0)
         )
@@ -141,11 +146,11 @@ def _render_backup() -> None:
 
 
 def render_admin_page() -> None:
-    st.header("Admin / Coordinator")
+    st.header("Admin")
     if not _unlocked():
         return
 
-    if st.button("Lock", key="co_lock_page"):
+    if st.button("Lock", key="co_lock_page", icon=":material/lock:"):
         st.session_state["coordinator_ok"] = False
         st.rerun()
 

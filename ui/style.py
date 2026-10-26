@@ -47,7 +47,7 @@ def apply_theme() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
-def narrow_page(max_width_px: int = 640) -> None:
+def narrow_page(max_width_px: int = 720) -> None:
     """Centre the page in a narrow column (the teachers' PIN and marks page)."""
     st.markdown(
         f"<style>.block-container {{ max-width: {max_width_px}px; }}</style>",
