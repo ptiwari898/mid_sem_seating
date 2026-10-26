@@ -232,3 +232,24 @@ def test_result_analysis_can_load_a_marks_session_by_pin(opened):
     assert not app.exception and not app.error
     assert [s["subject"] for s in app.session_state["ra_subjects"]] == ["Maths", "Physics"]
     assert "Download Section-wise Excel" in [d.label for d in app.get("download_button")]
+
+
+def test_backup_can_be_restored_after_the_database_is_lost(opened):
+    pin, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    table = marks_store.get_marks_table(session.id, maths.id)
+    table["Marks"] = [5.0, 6.0, 7.0]
+    marks_store.save_marks(session, maths.id, table, "Prof A")
+    backup = marks_store.backup_bytes()
+
+    marks_store.DB_PATH.unlink()  # host restart wipes the file
+    assert marks_store.find_session(pin) is None
+
+    marks_store.restore_from_bytes(backup)
+    assert marks_store.find_session(pin) == session
+    assert marks_store.get_marks_table(session.id, maths.id)["Marks"].tolist() == [5.0, 6.0, 7.0]
+
+
+def test_restore_rejects_files_that_are_not_backups():
+    with pytest.raises(marks_store.MarksError, match="not a marks backup"):
+        marks_store.restore_from_bytes(b"hello")

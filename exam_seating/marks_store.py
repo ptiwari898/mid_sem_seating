@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import secrets
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -249,6 +250,43 @@ def export_history(session_id: int) -> pd.DataFrame:
             conn,
             params=(session_id,),
         )
+
+
+def backup_bytes() -> bytes:
+    """A consistent copy of the whole database, for download."""
+    with _connect():  # makes sure the file and tables exist
+        pass
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "backup.db"
+        source, copy = sqlite3.connect(DB_PATH), sqlite3.connect(target)
+        try:
+            source.backup(copy)
+        finally:
+            source.close()
+            copy.close()
+        return target.read_bytes()
+
+
+def restore_from_bytes(data: bytes) -> None:
+    """Replace the whole database with an earlier backup (used after a host restart)."""
+    required = {"sessions", "subjects", "students", "marks"}
+    with tempfile.TemporaryDirectory() as tmp:
+        candidate = Path(tmp) / "candidate.db"
+        candidate.write_bytes(data)
+        check = sqlite3.connect(candidate)
+        try:
+            tables = {
+                r[0] for r in check.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            }
+        except sqlite3.DatabaseError as exc:
+            raise MarksError("That file is not a marks backup.") from exc
+        finally:
+            check.close()
+        if not required <= tables:
+            raise MarksError("That file is not a marks backup.")
+        staged = DB_PATH.with_suffix(".restore")
+        staged.write_bytes(data)
+    staged.replace(DB_PATH)
 
 
 def delete_session(session_id: int) -> None:

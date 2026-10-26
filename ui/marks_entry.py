@@ -180,6 +180,7 @@ def render_coordinator_panel() -> None:
     sessions = marks_store.list_sessions()
     if not sessions:
         st.info("No marks sessions yet. Tick the marks-entry option when generating a seating plan.")
+        _backup_controls()
         return
     for item in sessions:
         status = "locked" if item.locked else ("expired" if item.expired else "open")
@@ -210,3 +211,30 @@ def render_coordinator_panel() -> None:
             if c4.button("Delete session", key=f"co_del_{item.id}"):
                 marks_store.delete_session(item.id)
                 st.rerun()
+    _backup_controls()
+
+
+def _backup_controls() -> None:
+    """Download or restore the whole marks database."""
+    st.divider()
+    st.caption(
+        "The database is a file on the server and can be lost when the app restarts or is "
+        "redeployed. Download a backup after each marks round and restore it if that happens."
+    )
+    b1, b2 = st.columns(2)
+    b1.download_button(
+        "Download full backup",
+        data=marks_store.backup_bytes(),
+        file_name="marks_backup.db",
+        mime="application/octet-stream",
+        key="co_backup",
+    )
+    restore = b2.file_uploader("Restore from backup", type=["db"], key="co_restore")
+    if restore is not None and st.button("Replace current data with this backup", key="co_restore_go"):
+        try:
+            marks_store.restore_from_bytes(restore.getvalue())
+        except marks_store.MarksError as exc:
+            st.error(str(exc))
+        else:
+            st.success("Backup restored.")
+            st.rerun()
