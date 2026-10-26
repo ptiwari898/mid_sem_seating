@@ -75,3 +75,20 @@ def test_saving_without_a_teacher_name_is_refused():
     app = _open_as_teacher(pin)
     next(b for b in app.button if b.label.endswith("Save Marks")).click().run()
     assert [e.value for e in app.error] == ["Enter your name before saving."]
+
+
+def test_marks_entry_is_its_own_page_and_not_a_tab_of_the_coordinator_page():
+    pin, _ = _make_session()
+    page = AppTest.from_string(
+        "import streamlit_app\nstreamlit_app.marks_entry_page()", default_timeout=30
+    ).run()
+    assert [h.value for h in page.header] == ["Marks Entry"]
+    page.text_input[0].set_value(pin)
+    page.button[0].click().run()
+    assert not page.exception
+    assert page.selectbox[0].options == ["Maths", "Physics"]
+
+    home = AppTest.from_file("streamlit_app.py", default_timeout=60).run()
+    assert not home.exception
+    assert [t.label for t in home.tabs] == ["Seating Plan", "Result Analysis", "Data & Coordinator"]
+    assert not any(t.label == "Session PIN" for t in home.text_input)  # PIN box lives on its page

@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from exam_seating.io_utils import parse_attendance
-from ui.marks_entry import render_coordinator_panel, render_teacher_marks_entry
+from ui.marks_entry import render_coordinator_panel
 
 
 # ── Initialisation ────────────────────────────────────────────────
@@ -43,10 +43,10 @@ def _clear_saved_students() -> None:
 
 
 def render_tab_data_management() -> None:
-    """Render the Data & Marks Management tab."""
+    """Render the saved-student data and coordinator tab."""
     _init_session_state()
 
-    st.header("📋 Data & Marks Management")
+    st.header("📋 Saved Data & Coordinator")
 
     # -----------------------------------------------------------------
     # A. Student Data Storage
@@ -133,9 +133,7 @@ def render_tab_data_management() -> None:
     # B. Marks entry by session PIN
     # -----------------------------------------------------------------
     st.divider()
-    render_teacher_marks_entry()
-
-    st.divider()
+    st.caption("Teachers enter marks on the separate **Marks Entry** page (use the sidebar or the /marks-entry link).")
     render_coordinator_panel()
 
     # -----------------------------------------------------------------

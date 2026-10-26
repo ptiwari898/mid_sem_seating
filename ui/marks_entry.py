@@ -37,7 +37,7 @@ def show_active_pin(slot=None) -> None:
         st.info(
             f"Marks entry is open for **{info['exam_title']}**. "
             f"Teacher PIN: **{info['pin']}** (valid {marks_store.SESSION_DAYS} days). "
-            "Teachers enter it in the *Data & Marks Management* tab."
+            "Teachers enter it on the *Marks Entry* page (link: `/marks-entry`)."
         )
         marks = marks_store.export_marks(info["session_id"])
         st.download_button(
@@ -68,7 +68,7 @@ def open_marks_session(
 
 def render_teacher_marks_entry() -> None:
     """Teacher flow: enter the PIN, pick any subject, enter marks for eligible students."""
-    st.subheader("🧑‍🏫 Marks Entry with Session PIN")
+    st.subheader("Enter the session PIN")
     st.caption("Use the PIN given by the exam coordinator to load the eligible students.")
 
     session: marks_store.MarksSession | None = st.session_state.get("teacher_marks_session")

@@ -26,7 +26,7 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Summary report (text)
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
-- Streamlit web app with three tabs: Seating Plan, Result Analysis, Data & Marks Management.
+- Streamlit web app with two pages: Seating & Results (tabs: Seating Plan, Result Analysis, Data & Coordinator) and a separate Marks Entry page for teachers.
 - Institute-style Excel reports: main seating sheet, debarred list and section-wise attendance sheets.
 - Attendance written as `82`, `82%` or an Excel percent cell (0.82) is read as 82.
 - Optional PIN-based marks entry for the eligible students (see below).
@@ -34,8 +34,9 @@ A complete Python-based system to automate exam seating arrangement using studen
 
 ## Marks Entry
 
-Tick "Also open marks entry" when generating a plan to get a 6-digit PIN. Teachers enter the PIN in the
-Data & Marks Management tab, pick any subject (and section) and enter marks for the eligible students.
+Tick "Also open marks entry" when generating a plan to get a 6-digit PIN. Teachers open the separate
+**Marks Entry** page (`/marks-entry`, also in the sidebar), enter the PIN, pick any subject (and section)
+and enter marks for the eligible students.
 The coordinator can recover the PIN, lock the marks, download marks and edit history, and back up the
 database. See [sample_data/HOW_TO_PROVIDE_DATA.md](sample_data/HOW_TO_PROVIDE_DATA.md).
 

@@ -1,6 +1,7 @@
 # How to Provide Data
 
-The app has three tabs: **Seating Plan**, **Result Analysis** and **Data & Marks Management**.
+The app has two pages. **Seating & Results** has the tabs **Seating Plan**, **Result Analysis** and
+**Data & Coordinator**. **Marks Entry** (`/marks-entry`) is a separate page for teachers.
 
 ## 1. Student file
 
@@ -20,7 +21,7 @@ All three are read as 82. See `students.csv` for an example.
 
 ## 3. Teachers enter marks
 
-1. Open **Data & Marks Management**, go to **Marks Entry with Session PIN**, and enter the PIN.
+1. Open the **Marks Entry** page (sidebar, or add `/marks-entry` to the app address) and enter the PIN.
 2. Choose any subject (all subjects are listed), optionally a section, and type your name.
 3. Fill in marks (or tick **Absent**) and press **Save Marks**. Only changed rows are saved.
 
@@ -30,7 +31,7 @@ PINs in 15 minutes pause every PIN check.
 ## 4. Coordinator tasks
 
 Set `ADMIN_PASSWORD` in the app secrets (`.streamlit/secrets.toml` locally, the Secrets
-panel on Streamlit Cloud). Then, under **Coordinator: Marks Sessions**, you can:
+panel on Streamlit Cloud). Then, in the **Data & Coordinator** tab under **Coordinator: Marks Sessions**, you can:
 
 - see each session's PIN and progress (useful if the PIN was lost)
 - download the marks, or the full edit history, as CSV
@@ -46,7 +47,7 @@ so download a backup after each marks round.
 In **Result Analysis**, choose where the data comes from:
 
 - **Upload a file** (see `sample_results.csv` and `result_analysis_template.csv`)
-- **Saved student data** from the Data & Marks Management tab
+- **Saved student data** from the Data & Coordinator tab
 - **Marks entry session (PIN)**: loads every subject's marks; press **Add all session subjects**
   to create the subject list. Absent students show as `AB` and count as not appeared.
 

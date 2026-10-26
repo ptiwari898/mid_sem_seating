@@ -330,7 +330,7 @@ def render_tab_generate(info: dict) -> None:
     open_marks = mk1.checkbox(
         "Also open marks entry for the eligible students (creates a PIN for teachers)",
         disabled=not subject_names,
-        help="Teachers use the PIN in the Data & Marks Management tab to enter marks for any subject.",
+        help="Teachers use the PIN on the separate Marks Entry page to enter marks for any subject.",
     )
     marks_max = mk2.number_input("Max marks", min_value=1.0, value=30.0, step=1.0, disabled=not open_marks)
     if not subject_names:
