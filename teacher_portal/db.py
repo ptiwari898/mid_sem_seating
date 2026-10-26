@@ -83,10 +83,13 @@ def get_teacher_by_id(teacher_id: int) -> Teacher | None:
     return Teacher(id=row[0], name=row[1], email=row[2])
 
 
-def get_all_teachers_with_hashes() -> list[tuple[int, str]]:
+def get_code_hash_by_email(email: str) -> tuple[int, str] | None:
     with _connect() as conn:
-        rows = conn.execute("SELECT id, code_hash FROM teachers").fetchall()
-    return [(row[0], row[1]) for row in rows]
+        row = conn.execute(
+            "SELECT id, code_hash FROM teachers WHERE email = ?",
+            (email.strip().lower(),),
+        ).fetchone()
+    return None if row is None else (row[0], row[1])
 
 
 def add_assignment(

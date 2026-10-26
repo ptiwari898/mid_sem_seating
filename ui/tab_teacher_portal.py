@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -130,12 +131,24 @@ def render_tab_teacher_portal() -> None:
 
     teacher_id = st.session_state["teacher_portal_teacher_id"]
     if teacher_id is None:
+        email = st.text_input("Email", key="teacher_portal_email")
         code = st.text_input("Enter your login code", type="password", key="teacher_portal_code")
         if st.button("Login", key="teacher_portal_login"):
-            matched_teacher = auth.verify_code(code.strip(), db.get_all_teachers_with_hashes())
+            wait = auth.lockout_seconds_left(
+                st.session_state.get("teacher_failed_attempts", 0),
+                st.session_state.get("teacher_last_failure", 0.0),
+            )
+            if wait:
+                st.error(f"Too many failed attempts. Try again in {wait // 60 + 1} min.")
+                return
+            record = db.get_code_hash_by_email(email) if email.strip() else None
+            matched_teacher = auth.verify_code(code.strip(), [record]) if record else None
             if matched_teacher is None:
-                st.error("Invalid code.")
+                st.session_state["teacher_failed_attempts"] = st.session_state.get("teacher_failed_attempts", 0) + 1
+                st.session_state["teacher_last_failure"] = time.time()
+                st.error("Invalid email or code.")
             else:
+                st.session_state["teacher_failed_attempts"] = 0
                 st.session_state["teacher_portal_teacher_id"] = matched_teacher
                 st.rerun()
         return
@@ -199,7 +212,7 @@ def render_tab_teacher_portal() -> None:
         disabled=["Roll Number", "Name"],
         column_config={
             "Mid-Sem Marks": st.column_config.NumberColumn(
-                "Mid-Sem Marks (/30)",
+                f"Mid-Sem Marks (/{assignment.max_marks})",
                 min_value=0.0,
                 max_value=float(assignment.max_marks),
                 step=0.5,

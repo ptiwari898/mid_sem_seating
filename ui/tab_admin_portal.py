@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hmac
 import io
+import time
 
 import pandas as pd
 import streamlit as st
@@ -28,9 +30,19 @@ def render_tab_admin_portal() -> None:
     if not st.session_state["admin_portal_authenticated"]:
         password = st.text_input("Admin Password", type="password", key="admin_portal_password")
         if st.button("Login", key="admin_portal_login"):
-            if password == admin_password:
+            wait = auth.lockout_seconds_left(
+                st.session_state.get("admin_failed_attempts", 0),
+                st.session_state.get("admin_last_failure", 0.0),
+            )
+            if wait:
+                st.error(f"Too many failed attempts. Try again in {wait // 60 + 1} min.")
+                return
+            if hmac.compare_digest(password.encode("utf-8"), str(admin_password).encode("utf-8")):
+                st.session_state["admin_failed_attempts"] = 0
                 st.session_state["admin_portal_authenticated"] = True
                 st.rerun()
+            st.session_state["admin_failed_attempts"] = st.session_state.get("admin_failed_attempts", 0) + 1
+            st.session_state["admin_last_failure"] = time.time()
             st.error("Invalid admin password.")
         return
 

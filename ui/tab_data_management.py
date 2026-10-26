@@ -10,6 +10,7 @@ import streamlit as st
 MARKS_PIN_KEY = "MARKS_PIN"
 MAX_PIN_ATTEMPTS = 3
 LOCKOUT_SECONDS = 900
+MAX_MARKS = 30  # same default as assignments.max_marks in teacher_portal/db.py
 
 
 # ── Initialisation ────────────────────────────────────────────────
@@ -88,7 +89,7 @@ def _validate_pin(pin: str) -> bool:
 def _build_marks_entries(students_df: pd.DataFrame) -> pd.DataFrame:
     """Create an editable DataFrame for faculty to enter marks."""
     df = students_df[["Roll Number", "Name"]].copy()
-    df["Marks"] = 0
+    df["Marks"] = float("nan")  # blank, so "not entered" is never mistaken for a real 0
     df["Absent"] = False
     return df
 
@@ -190,6 +191,10 @@ def render_tab_data_management() -> None:
     # -----------------------------------------------------------------
     st.divider()
     st.subheader("🔐 Faculty Marks Entry")
+    st.warning(
+        "Marks entered here are kept for this browser session only and are lost on refresh. "
+        "Export the CSV before leaving. For permanent records, use the Teacher Portal."
+    )
 
     # PIN entry area
     if not st.session_state["marks_authenticated"]:
@@ -271,9 +276,9 @@ def render_tab_data_management() -> None:
                     "Name": st.column_config.TextColumn("Student Name", help="Student name"),
                     "Marks": st.column_config.NumberColumn(
                         "Marks",
-                        help="Marks obtained (0-30)",
+                        help=f"Marks obtained (0-{MAX_MARKS})",
                         min_value=0,
-                        max_value=30,
+                        max_value=MAX_MARKS,
                         step=1,
                     ),
                     "Absent": st.column_config.CheckboxColumn(
@@ -293,6 +298,8 @@ def render_tab_data_management() -> None:
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("💾 Submit Marks", type="primary", use_container_width=True):
+                    # An absent student has no marks, whatever was typed before ticking Absent.
+                    edited_df.loc[edited_df["Absent"], "Marks"] = float("nan")
                     # Update the entries with edited values
                     marks_data["entries"] = edited_df.to_dict("records")
                     marks_data["verified_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
