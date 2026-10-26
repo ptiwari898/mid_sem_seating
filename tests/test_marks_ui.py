@@ -106,3 +106,20 @@ def test_only_the_coordinator_page_links_to_marks_entry_and_not_back():
 
     home = AppTest.from_file(str(APP), default_timeout=60).run()
     assert [link.proto.page for link in home.sidebar.get("page_link")] == ["marks-entry", "admin"]
+
+
+def test_theme_button_switches_between_dark_default_and_light_without_losing_state():
+    app = AppTest.from_file(str(APP), default_timeout=60).run()
+    toggle = next(b for b in app.button if b.key == "theme_button")
+    assert toggle.label == "Light mode"  # dark is the default
+    assert not any("invert(1)" in m.value for m in app.markdown)
+
+    app.session_state["marks_probe"] = "kept"  # stands in for an open PIN session or uploaded file
+    toggle.click().run()
+    assert app.session_state["theme"] == "light" and app.session_state["marks_probe"] == "kept"
+    assert any("invert(1)" in m.value for m in app.markdown)
+    assert next(b for b in app.button if b.key == "theme_button").label == "Dark mode"
+
+    next(b for b in app.button if b.key == "theme_button").click().run()
+    assert app.session_state["theme"] == "dark"
+    assert not any("invert(1)" in m.value for m in app.markdown)

@@ -92,7 +92,9 @@ docs/               Extra documentation
 
 ## Look and Feel
 
-Colours, radii and heading sizes are set in `.streamlit/config.toml` (one blue accent per light and dark mode);
+Dark is the default. A Light mode / Dark mode button at the bottom left of every page switches instantly and keeps your
+work (it is done in CSS, because Streamlit can only change its theme with a page reload). Colours, radii and heading
+sizes are set in `.streamlit/config.toml` (one blue accent);
 `ui/style.py` adds the rest and documents the rules: one accent, 8px controls, 12px cards, Material icons
 instead of emoji, and a narrow centred layout for the teachers' and admin password pages.
 

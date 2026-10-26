@@ -13,7 +13,7 @@ import streamlit as st
 from ui.admin_page import render_admin_page
 from ui.marks_entry import render_teacher_marks_entry
 from ui.runtime import cleanup_old_web_runs
-from ui.style import apply_theme, narrow_page
+from ui.style import apply_theme, hide_sidebar, narrow_page, theme_toggle
 from ui.sidebar import sidebar_institute_info
 from ui.tab_data_management import render_tab_data_management
 from ui.tab_generate import render_tab_generate
@@ -42,12 +42,14 @@ def coordinator_page() -> None:
 
 
 def marks_entry_page() -> None:
+    hide_sidebar()
     narrow_page()
     st.header("Marks Entry")
     render_teacher_marks_entry()
 
 
 def admin_page() -> None:
+    hide_sidebar()
     render_admin_page()
 
 
@@ -68,6 +70,7 @@ def main() -> None:
     )
 
     apply_theme()
+    theme_toggle()
     st.navigation([COORDINATOR_PAGE, MARKS_PAGE, ADMIN_PAGE], position="hidden").run()
 
 

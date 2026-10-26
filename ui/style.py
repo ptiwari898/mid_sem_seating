@@ -2,7 +2,7 @@
 .streamlit/config.toml; this file only adds what the theme cannot express.
 
 Rules (keep new UI inside them):
-  - One accent colour per mode (primaryColor). Neutrals follow the system light/dark setting.
+  - One accent colour (primaryColor). Dark is the default; light is a CSS switch (theme_toggle).
   - Two corner radii: 8px for controls (the theme's baseRadius), 12px for containers (cards,
     forms, expanders, metrics).
   - Icons are Material icons (":material/name:"), never emoji.
@@ -42,9 +42,52 @@ hr {{ margin: 1.25rem 0; opacity: 0.5; }}
 """
 
 
+# Light mode inverts the dark theme and turns the hues back, so blues stay blue and reds stay red.
+# Streamlit cannot change its theme at run time (that needs a page reload, which would lose
+# uploaded files and open sessions), so this is done in CSS and works instantly.
+_LIGHT_CSS = """
+<style>
+[data-testid="stApp"] { filter: invert(1) hue-rotate(180deg); }
+</style>
+"""
+
+_TOGGLE_CSS = """
+<style>
+.st-key-theme_toggle { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000001; width: auto; }
+.st-key-theme_toggle button { box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); }
+</style>
+"""
+
+
+def _flip_theme() -> None:
+    st.session_state["theme"] = "light" if st.session_state.get("theme", "dark") == "dark" else "dark"
+
+
+def theme_toggle() -> None:
+    """Dark/light switch pinned to the bottom left of every page. Dark is the default."""
+    dark = st.session_state.get("theme", "dark") == "dark"
+    st.markdown(_TOGGLE_CSS if dark else _TOGGLE_CSS + _LIGHT_CSS, unsafe_allow_html=True)
+    with st.container(key="theme_toggle"):
+        st.button(
+            "Light mode" if dark else "Dark mode",
+            icon=":material/light_mode:" if dark else ":material/dark_mode:",
+            key="theme_button",
+            on_click=_flip_theme,
+        )
+
+
 def apply_theme() -> None:
     """Inject the shared stylesheet. Call once per run, before the page is drawn."""
     st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def hide_sidebar() -> None:
+    """For pages with nothing in the sidebar (teachers' and admin pages), so no empty panel shows."""
+    st.markdown(
+        "<style>[data-testid='stSidebar'], [data-testid='stSidebarCollapsedControl'],"
+        " [data-testid='stExpandSidebarButton'] { display: none; }</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def narrow_page(max_width_px: int = 720) -> None:
