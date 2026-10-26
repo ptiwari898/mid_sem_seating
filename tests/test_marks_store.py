@@ -119,3 +119,31 @@ def test_clearing_a_saved_mark_is_still_possible(opened):
     cleared.loc[0, "Marks"] = float("nan")
     marks_store.save_marks(session, maths.id, cleared, "Prof A", original=loaded)
     assert pd.isna(marks_store.get_marks_table(session.id, maths.id)["Marks"][0])
+
+
+def test_sections_filter_the_roster_and_old_databases_are_upgraded(tmp_path, monkeypatch):
+    import sqlite3
+
+    old = tmp_path / "old.db"
+    with sqlite3.connect(old) as conn:  # a database made before Section/Branch existed
+        conn.executescript(
+            "CREATE TABLE students (session_id INTEGER, roll_no TEXT, name TEXT, "
+            "PRIMARY KEY (session_id, roll_no));"
+        )
+    monkeypatch.setattr(marks_store, "DB_PATH", old)
+
+    students = pd.DataFrame(
+        {
+            "Roll Number": ["1", "2", "3"],
+            "Name": ["A", "B", "C"],
+            "Section": ["A", "B", "A"],
+            "Branch": ["CSIT", "CSIT", "CSIT"],
+        }
+    )
+    _, session = marks_store.create_session("Mid", ["Maths"], students)
+    maths = marks_store.list_subjects(session.id)[0]
+
+    assert marks_store.list_sections(session.id) == ["A", "B"]
+    only_a = marks_store.get_marks_table(session.id, maths.id, "A")
+    assert only_a["Roll Number"].tolist() == ["1", "3"]
+    assert marks_store.get_marks_table(session.id, maths.id)["Roll Number"].tolist() == ["1", "2", "3"]

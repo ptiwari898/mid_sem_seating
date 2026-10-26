@@ -62,6 +62,8 @@ def _connect():
             session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
             roll_no    TEXT NOT NULL,
             name       TEXT NOT NULL,
+            section    TEXT NOT NULL DEFAULT '',
+            branch     TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (session_id, roll_no)
         );
         CREATE TABLE IF NOT EXISTS marks (
@@ -75,6 +77,11 @@ def _connect():
         );
         """
     )
+    # Databases made before sections existed need the two extra columns.
+    have = {row[1] for row in conn.execute("PRAGMA table_info(students)")}
+    for column in ("section", "branch"):
+        if column not in have:
+            conn.execute(f"ALTER TABLE students ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     try:
         yield conn
         conn.commit()
@@ -104,8 +111,12 @@ def create_session(
     if max_marks <= 0:
         raise MarksError("Maximum marks must be above 0.")
 
+    def text(row: pd.Series, column: str) -> str:
+        value = row.get(column)
+        return "" if value is None or pd.isna(value) else str(value).strip()
+
     roster = [
-        (str(r["Roll Number"]).strip(), str(r["Name"]).strip())
+        (text(r, "Roll Number"), text(r, "Name"), text(r, "Section"), text(r, "Branch"))
         for _, r in students.iterrows()
     ]
     with _connect() as conn:
@@ -120,8 +131,9 @@ def create_session(
             [(session_id, name) for name in subject_names],
         )
         conn.executemany(
-            "INSERT OR IGNORE INTO students (session_id, roll_no, name) VALUES (?, ?, ?)",
-            [(session_id, roll, name) for roll, name in roster],
+            "INSERT OR IGNORE INTO students (session_id, roll_no, name, section, branch) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [(session_id, roll, name, section, branch) for roll, name, section, branch in roster],
         )
     return pin, MarksSession(session_id, exam_title.strip(), float(max_marks))
 
@@ -153,21 +165,32 @@ def list_subjects(session_id: int) -> list[Subject]:
     return [Subject(r[0], r[1]) for r in rows]
 
 
-def get_marks_table(session_id: int, subject_id: int) -> pd.DataFrame:
-    """All students of the session with any marks already saved for the subject."""
+def get_marks_table(session_id: int, subject_id: int, section: str | None = None) -> pd.DataFrame:
+    """Students of the session (optionally one section) with marks already saved for the subject."""
     with _connect() as conn:
         return pd.read_sql_query(
             """
             SELECT s.roll_no AS "Roll Number", s.name AS "Name",
+                   s.branch AS "Branch", s.section AS "Section",
                    m.marks AS "Marks", COALESCE(m.is_absent, 0) AS "Absent"
             FROM students s
             LEFT JOIN marks m ON m.roll_no = s.roll_no AND m.subject_id = ?
-            WHERE s.session_id = ?
+            WHERE s.session_id = ? AND (? IS NULL OR s.section = ?)
             ORDER BY s.roll_no
             """,
             conn,
-            params=(subject_id, session_id),
+            params=(subject_id, session_id, section, section),
         ).astype({"Absent": bool})
+
+
+def list_sections(session_id: int) -> list[str]:
+    """Distinct non-empty sections in the roster, for the teacher's filter."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT section FROM students WHERE session_id = ? AND section != '' ORDER BY section",
+            (session_id,),
+        ).fetchall()
+    return [r[0] for r in rows]
 
 
 def _cell(row: pd.Series) -> tuple[float | None, bool]:

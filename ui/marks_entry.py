@@ -54,7 +54,7 @@ def open_marks_session(
     """Create the session from the eligible students and show its PIN."""
     try:
         pin, session = marks_store.create_session(
-            exam_title, subjects, eligible[["Roll Number", "Name"]], max_marks
+            exam_title, subjects, eligible, max_marks
         )
     except marks_store.MarksError as exc:
         st.error(str(exc))
@@ -102,18 +102,24 @@ def render_teacher_marks_entry() -> None:
     subject = st.selectbox(
         "Subject (all subjects are listed)", subjects, format_func=lambda s: s.name, key="tm_subject"
     )
+    sections = marks_store.list_sections(session.id)
+    section = (
+        st.selectbox("Section", ["All"] + sections, key="tm_section") if sections else "All"
+    )
     teacher = st.text_input("Your name", key="tm_teacher")
 
-    table = marks_store.get_marks_table(session.id, subject.id)
+    table = marks_store.get_marks_table(
+        session.id, subject.id, None if section == "All" else section
+    )
     entered = int((table["Marks"].notna() | table["Absent"]).sum())
     st.caption(f"{entered} of {len(table)} students already have an entry for this subject.")
 
     edited = st.data_editor(
         table,
-        key=f"tm_editor_{session.id}_{subject.id}",
+        key=f"tm_editor_{session.id}_{subject.id}_{section}",
         hide_index=True,
         use_container_width=True,
-        disabled=["Roll Number", "Name"],
+        disabled=["Roll Number", "Name", "Branch", "Section"],
         column_config={
             "Marks": st.column_config.NumberColumn(
                 "Marks", min_value=0.0, max_value=float(session.max_marks), step=0.5
