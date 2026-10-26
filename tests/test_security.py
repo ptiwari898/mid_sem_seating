@@ -74,3 +74,7 @@ def test_api_returns_400_for_cutoff_outside_0_to_100(cutoff):
     )
     assert response.status_code == 400
     assert "attendance_cutoff" in response.json()["detail"]
+
+
+def test_unsafe_download_route_is_gone():
+    assert TestClient(app).get("/api/download/a.txt", params={"content_base64": "aGk="}).status_code == 404

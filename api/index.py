@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import base64
-import io
 import tempfile
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from exam_seating.allocator import allocate_students_to_rooms, split_eligibility
@@ -264,26 +263,4 @@ async def generate_seating_multipart(
         random_seed=random_seed,
         alternate_seats=alternate_seats,
         export_pdf_file=export_pdf_file,
-    )
-
-
-@app.get("/api/download/{filename}")
-async def download_file(filename: str, content_base64: str):
-    try:
-        content = base64.b64decode(content_base64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 content")
-
-    media_type = "application/octet-stream"
-    if filename.endswith(".xlsx"):
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif filename.endswith(".pdf"):
-        media_type = "application/pdf"
-    elif filename.endswith(".txt"):
-        media_type = "text/plain"
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
