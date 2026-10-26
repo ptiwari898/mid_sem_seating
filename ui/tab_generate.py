@@ -131,6 +131,7 @@ def render_tab_generate(info: dict) -> None:
             add_room = c_btn.form_submit_button("Add")
 
             if add_room:
+                room_no_in = room_no_in.strip()
                 if not room_no_in:
                     st.error("Room Number is required.")
                 else:
