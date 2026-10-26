@@ -166,10 +166,10 @@ def render_tab_generate(info: dict) -> None:
                         )
 
         if st.session_state["rooms_with_info"]:
-            rooms_display = pd.DataFrame(st.session_state["rooms_with_info"])
-            st.dataframe(rooms_display, use_container_width=True, hide_index=True)
-
-            st.markdown("Room Row Actions")
+            h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
+            h1.markdown("**#**")
+            h2.markdown("**Room**")
+            h3.markdown("**Capacity**")
             for idx, row in enumerate(st.session_state["rooms_with_info"]):
                 r1, r2, r3, r4, r5 = st.columns([0.5, 3, 2, 1, 1])
                 r1.write(str(idx + 1))
@@ -257,10 +257,10 @@ def render_tab_generate(info: dict) -> None:
 
     if st.session_state["exam_subjects"]:
         st.caption("These columns will be added to attendance sheets.")
-        subject_df = pd.DataFrame(st.session_state["exam_subjects"])
-        st.dataframe(subject_df, use_container_width=True, hide_index=True)
-
-        st.markdown("Row Actions")
+        h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
+        h1.markdown("**#**")
+        h2.markdown("**Subject**")
+        h3.markdown("**Exam date**")
         for idx, row in enumerate(st.session_state["exam_subjects"]):
             c1, c2, c3, c4, c5 = st.columns([0.5, 3, 2, 1, 1])
             c1.write(str(idx + 1))

@@ -48,3 +48,24 @@ def test_generated_plan_is_remembered_for_the_admin_page(tmp_path, monkeypatch):
         {"Room": "F-308", "Students": 0, "From": "", "To": ""},
     ]
     assert marks_store.get_plan_archive(plan.id) == b"zipbytes"
+
+
+def test_rooms_and_subjects_are_listed_once_with_edit_and_delete_buttons():
+    app = AppTest.from_string(
+        "from ui.tab_generate import render_tab_generate\n"
+        f"render_tab_generate({INFO!r})",
+        default_timeout=30,
+    ).run()
+    _add_room(app, "F-307")
+
+    subject_box = next(t for t in app.text_input if t.label == "Subject")
+    subject_box.set_value("CSIT-301")
+    adds = [b for b in app.button if b.label == "Add"]
+    adds[-1].click().run()  # the timetable's Add button comes after the room form's
+
+    assert not app.exception
+    assert len(app.dataframe) == 0  # no read-only copy of the rows
+    labels = [b.label for b in app.button]
+    assert labels.count("Edit") == 2 and labels.count("Delete") == 2  # one pair per room and subject
+    shown = [m.value for m in app.markdown]
+    assert shown.count("F-307") == 1 and shown.count("CSIT-301") == 1  # each row appears once
