@@ -47,6 +47,7 @@ def _remember_plan(info, cutoff, summary, room_allocations, archive, marks_sessi
 
 def render_tab_generate(info: dict) -> None:
     st.header("Generate Seating Plan")
+    st.caption("Upload students, add rooms and exam subjects, then generate the seating plan and reports.")
 
     if "rooms_with_info" not in st.session_state:
         st.session_state["rooms_with_info"] = []
@@ -57,307 +58,327 @@ def render_tab_generate(info: dict) -> None:
     if "editing_room_index" not in st.session_state:
         st.session_state["editing_room_index"] = None
 
-    st.subheader("1. Upload Students")
-    st.caption("Required columns: Roll Number, Name, Attendance Percentage")
+    with st.container(border=True):
+        st.subheader("1. Students")
+        st.caption("Required columns: Roll Number, Name, Attendance Percentage")
 
-    col_tmpl, _ = st.columns([1, 3])
-    col_tmpl.download_button(
-        "Download template",
-        data=make_students_template(),
-        file_name="students_template.xlsx",
-        mime=XLSX_MIME,
-        key="tmpl_students_gen",
-    )
-
-    students_sqlite_table = st.text_input(
-        "Students SQLite table name",
-        value="students",
-        help="Used only for .db/.sqlite/.sqlite3 uploads.",
-    )
-    students_file = st.file_uploader(
-        "Upload students (.xlsx/.xls/.csv/.db/.sqlite/.sqlite3)",
-        type=["xlsx", "xls", "csv", "db", "sqlite", "sqlite3"],
-        key="students_upload_gen",
-    )
-
-    students_df = pd.DataFrame()
-    if students_file is not None:
-        try:
-            students_df = load_students_from_upload(students_file, students_sqlite_table)
-            if not students_df.empty:
-                students_df.columns = [c.strip() for c in students_df.columns]
-
-            required = {"Roll Number", "Name", "Attendance Percentage"}
-            missing = required - set(students_df.columns)
-            if not students_df.empty and missing:
-                st.error(f"Missing columns in uploaded file: {', '.join(missing)}")
-                students_df = pd.DataFrame()
-            elif not students_df.empty:
-                attendance_numeric = parse_attendance(students_df["Attendance Percentage"])
-                invalid_attendance_count = int(attendance_numeric.isna().sum())
-                if invalid_attendance_count > 0:
-                    st.warning(
-                        f"{invalid_attendance_count} students had unparseable attendance and were excluded."
-                    )
-                students_df = students_df[attendance_numeric.notna()].copy()
-                students_df["Attendance Percentage"] = attendance_numeric[attendance_numeric.notna()].astype(float)
-                students_df = students_df.drop_duplicates(subset=["Roll Number"], keep="first")
-                students_df = students_df.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
-
-                sections = students_df["Section"].nunique() if "Section" in students_df.columns else None
-                info_msg = f"Loaded {len(students_df)} students"
-                if sections:
-                    info_msg += f" across {sections} section(s)"
-                st.success(info_msg)
-        except Exception as exc:
-            st.error(f"Could not read students file: {exc}")
-
-    st.divider()
-    st.subheader("2. Rooms")
-
-    rooms_method = st.radio(
-        "Room input method",
-        options=["Add manually", "Upload rooms file"],
-        horizontal=True,
-    )
-
-    uploaded_rooms_df = pd.DataFrame()
-    if rooms_method == "Upload rooms file":
-        rooms_sqlite_table = st.text_input(
-            "Rooms SQLite table name",
-            value="rooms",
-            help="Used only for .db/.sqlite/.sqlite3 uploads.",
+        col_tmpl, _ = st.columns([1, 3])
+        col_tmpl.download_button(
+            "Download template",
+            icon=":material/download:",
+            data=make_students_template(),
+            file_name="students_template.xlsx",
+            mime=XLSX_MIME,
+            key="tmpl_students_gen",
         )
-        rooms_file = st.file_uploader(
-            "Upload rooms (.xlsx/.xls/.csv/.db/.sqlite/.sqlite3)",
+
+        with st.expander("SQLite uploads"):
+            students_sqlite_table = st.text_input(
+                "Table name",
+                value="students",
+                help="Used only for .db/.sqlite/.sqlite3 uploads.",
+            )
+        students_file = st.file_uploader(
+            "Upload students (.xlsx/.xls/.csv/.db/.sqlite/.sqlite3)",
             type=["xlsx", "xls", "csv", "db", "sqlite", "sqlite3"],
-            key="rooms_upload_gen",
+            key="students_upload_gen",
         )
-        if rooms_file is not None:
+
+        students_df = pd.DataFrame()
+        if students_file is not None:
             try:
-                uploaded_rooms_df = load_rooms_from_upload(rooms_file, rooms_sqlite_table)
-                uploaded_rooms_df["Room Number"] = uploaded_rooms_df["Room Number"].astype(str).str.strip()
-                uploaded_rooms_df["Capacity"] = pd.to_numeric(uploaded_rooms_df["Capacity"], errors="coerce")
-                uploaded_rooms_df = uploaded_rooms_df.dropna(subset=["Capacity"])
-                uploaded_rooms_df["Capacity"] = uploaded_rooms_df["Capacity"].astype(int)
-                st.success(f"Loaded {len(uploaded_rooms_df)} rooms")
-                st.dataframe(uploaded_rooms_df, use_container_width=True, hide_index=True)
-            except Exception as exc:
-                st.error(f"Could not read rooms file: {exc}")
+                students_df = load_students_from_upload(students_file, students_sqlite_table)
+                if not students_df.empty:
+                    students_df.columns = [c.strip() for c in students_df.columns]
 
-    if rooms_method == "Add manually":
-        with st.form("add_room_form", clear_on_submit=True):
-            c1, c2, c_btn = st.columns([2, 1.5, 0.8])
-            room_no_in = c1.text_input("Room Number", placeholder="F-307")
-            capacity_in = c2.number_input("Capacity", 1, 10000, 40, 1)
-            add_room = c_btn.form_submit_button("Add")
-
-            if add_room:
-                room_no_in = room_no_in.strip()
-                if not room_no_in:
-                    st.error("Room Number is required.")
-                else:
-                    existing = {r["Room Number"] for r in st.session_state["rooms_with_info"]}
-                    if room_no_in in existing:
-                        st.error(f"Room {room_no_in} already added.")
-                    else:
-                        st.session_state["rooms_with_info"].append(
-                            {"Room Number": room_no_in, "Capacity": int(capacity_in)}
+                required = {"Roll Number", "Name", "Attendance Percentage"}
+                missing = required - set(students_df.columns)
+                if not students_df.empty and missing:
+                    st.error(f"Missing columns in uploaded file: {', '.join(missing)}")
+                    students_df = pd.DataFrame()
+                elif not students_df.empty:
+                    attendance_numeric = parse_attendance(students_df["Attendance Percentage"])
+                    invalid_attendance_count = int(attendance_numeric.isna().sum())
+                    if invalid_attendance_count > 0:
+                        st.warning(
+                            f"{invalid_attendance_count} students had unparseable attendance and were excluded."
                         )
+                    students_df = students_df[attendance_numeric.notna()].copy()
+                    students_df["Attendance Percentage"] = attendance_numeric[attendance_numeric.notna()].astype(float)
+                    students_df = students_df.drop_duplicates(subset=["Roll Number"], keep="first")
+                    students_df = students_df.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
 
-        if st.session_state["rooms_with_info"]:
-            h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
-            h1.markdown("**#**")
-            h2.markdown("**Room**")
-            h3.markdown("**Capacity**")
-            for idx, row in enumerate(st.session_state["rooms_with_info"]):
-                r1, r2, r3, r4, r5 = st.columns([0.5, 3, 2, 1, 1])
-                r1.write(str(idx + 1))
-                r2.write(str(row.get("Room Number", "")))
-                r3.write(str(row.get("Capacity", "")))
+                    sections = students_df["Section"].nunique() if "Section" in students_df.columns else None
+                    info_msg = f"Loaded {len(students_df)} students"
+                    if sections:
+                        info_msg += f" across {sections} section(s)"
+                    st.success(info_msg)
+            except Exception as exc:
+                st.error(f"Could not read students file: {exc}")
 
-                if r4.button("Edit", key=f"edit_room_{idx}"):
-                    st.session_state["editing_room_index"] = idx
-                    st.rerun()
-                if r5.button("Delete", key=f"delete_room_{idx}"):
-                    st.session_state["rooms_with_info"].pop(idx)
-                    if st.session_state["editing_room_index"] == idx:
-                        st.session_state["editing_room_index"] = None
-                    st.rerun()
+    with st.container(border=True):
+        st.subheader("2. Rooms")
 
-            edit_room_idx = st.session_state.get("editing_room_index")
-            if edit_room_idx is not None and 0 <= edit_room_idx < len(st.session_state["rooms_with_info"]):
-                st.markdown("Edit Selected Room")
-                current_room = st.session_state["rooms_with_info"][edit_room_idx]
+        rooms_method = st.radio(
+            "Room input method",
+            options=["Add manually", "Upload rooms file"],
+            horizontal=True,
+        )
 
-                with st.form("edit_room_form"):
-                    er1, er2, er3, er4 = st.columns([2, 1.5, 1, 1])
-                    edit_room_no = er1.text_input(
-                        "Room Number",
-                        value=str(current_room.get("Room Number", "")),
-                        key="edit_room_number",
-                    )
-                    edit_capacity = er2.number_input(
-                        "Capacity",
-                        min_value=1,
-                        max_value=10000,
-                        value=int(current_room.get("Capacity", 40)),
-                        step=1,
-                        key="edit_room_capacity",
-                    )
-                    save_room = er3.form_submit_button("Save")
-                    cancel_room = er4.form_submit_button("Cancel")
+        uploaded_rooms_df = pd.DataFrame()
+        if rooms_method == "Upload rooms file":
+            rooms_sqlite_table = st.text_input(
+                "Rooms SQLite table name",
+                value="rooms",
+                help="Used only for .db/.sqlite/.sqlite3 uploads.",
+            )
+            rooms_file = st.file_uploader(
+                "Upload rooms (.xlsx/.xls/.csv/.db/.sqlite/.sqlite3)",
+                type=["xlsx", "xls", "csv", "db", "sqlite", "sqlite3"],
+                key="rooms_upload_gen",
+            )
+            if rooms_file is not None:
+                try:
+                    uploaded_rooms_df = load_rooms_from_upload(rooms_file, rooms_sqlite_table)
+                    uploaded_rooms_df["Room Number"] = uploaded_rooms_df["Room Number"].astype(str).str.strip()
+                    uploaded_rooms_df["Capacity"] = pd.to_numeric(uploaded_rooms_df["Capacity"], errors="coerce")
+                    uploaded_rooms_df = uploaded_rooms_df.dropna(subset=["Capacity"])
+                    uploaded_rooms_df["Capacity"] = uploaded_rooms_df["Capacity"].astype(int)
+                    st.success(f"Loaded {len(uploaded_rooms_df)} rooms")
+                    st.dataframe(uploaded_rooms_df, use_container_width=True, hide_index=True)
+                except Exception as exc:
+                    st.error(f"Could not read rooms file: {exc}")
 
-                    if save_room:
-                        if not edit_room_no.strip():
-                            st.error("Room Number is required.")
+        if rooms_method == "Add manually":
+            with st.form("add_room_form", clear_on_submit=True, border=False):
+                c1, c2, c_btn = st.columns([2, 1.5, 0.8], vertical_alignment="bottom")
+                room_no_in = c1.text_input("Room Number", placeholder="F-307")
+                capacity_in = c2.number_input("Capacity", 1, 10000, 40, 1)
+                add_room = c_btn.form_submit_button("Add")
+
+                if add_room:
+                    room_no_in = room_no_in.strip()
+                    if not room_no_in:
+                        st.error("Room Number is required.")
+                    else:
+                        existing = {r["Room Number"] for r in st.session_state["rooms_with_info"]}
+                        if room_no_in in existing:
+                            st.error(f"Room {room_no_in} already added.")
                         else:
-                            duplicate = any(
-                                i != edit_room_idx and r.get("Room Number") == edit_room_no.strip()
-                                for i, r in enumerate(st.session_state["rooms_with_info"])
+                            st.session_state["rooms_with_info"].append(
+                                {"Room Number": room_no_in, "Capacity": int(capacity_in)}
                             )
-                            if duplicate:
-                                st.error(f"Room {edit_room_no.strip()} already exists.")
-                            else:
-                                st.session_state["rooms_with_info"][edit_room_idx] = {
-                                    "Room Number": edit_room_no.strip(),
-                                    "Capacity": int(edit_capacity),
-                                }
-                                st.session_state["editing_room_index"] = None
-                                st.rerun()
 
-                    if cancel_room:
-                        st.session_state["editing_room_index"] = None
+            if st.session_state["rooms_with_info"]:
+                h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
+                h1.markdown("**#**")
+                h2.markdown("**Room**")
+                h3.markdown("**Capacity**")
+                for idx, row in enumerate(st.session_state["rooms_with_info"]):
+                    r1, r2, r3, r4, r5 = st.columns([0.5, 3, 2, 1, 1])
+                    r1.write(str(idx + 1))
+                    r2.write(str(row.get("Room Number", "")))
+                    r3.write(str(row.get("Capacity", "")))
+
+                    if r4.button("Edit", key=f"edit_room_{idx}"):
+                        st.session_state["editing_room_index"] = idx
+                        st.rerun()
+                    if r5.button("Delete", key=f"delete_room_{idx}"):
+                        st.session_state["rooms_with_info"].pop(idx)
+                        if st.session_state["editing_room_index"] == idx:
+                            st.session_state["editing_room_index"] = None
                         st.rerun()
 
-            if st.button("Clear all rooms", key="clear_rooms"):
-                st.session_state["rooms_with_info"] = []
-                st.session_state["editing_room_index"] = None
-                st.rerun()
+                edit_room_idx = st.session_state.get("editing_room_index")
+                if edit_room_idx is not None and 0 <= edit_room_idx < len(st.session_state["rooms_with_info"]):
+                    st.markdown("Edit Selected Room")
+                    current_room = st.session_state["rooms_with_info"][edit_room_idx]
 
-    st.divider()
-    st.subheader("3. Exam Timetable (Subject-wise and Date-wise)")
+                    with st.form("edit_room_form", border=False):
+                        er1, er2, er3, er4 = st.columns([2, 1.5, 1, 1], vertical_alignment="bottom")
+                        edit_room_no = er1.text_input(
+                            "Room Number",
+                            value=str(current_room.get("Room Number", "")),
+                            key="edit_room_number",
+                        )
+                        edit_capacity = er2.number_input(
+                            "Capacity",
+                            min_value=1,
+                            max_value=10000,
+                            value=int(current_room.get("Capacity", 40)),
+                            step=1,
+                            key="edit_room_capacity",
+                        )
+                        save_room = er3.form_submit_button("Save")
+                        cancel_room = er4.form_submit_button("Cancel")
 
-    with st.form("add_subject_form", clear_on_submit=True):
-        s1, s2, s_btn = st.columns([2, 1.5, 0.8])
-        subj_in = s1.text_input("Subject", placeholder="CSIT-401 (M-III)")
-        exam_date = s2.date_input("Exam Date", key="subject_date_input")
-        add_subject = s_btn.form_submit_button("Add")
+                        if save_room:
+                            if not edit_room_no.strip():
+                                st.error("Room Number is required.")
+                            else:
+                                duplicate = any(
+                                    i != edit_room_idx and r.get("Room Number") == edit_room_no.strip()
+                                    for i, r in enumerate(st.session_state["rooms_with_info"])
+                                )
+                                if duplicate:
+                                    st.error(f"Room {edit_room_no.strip()} already exists.")
+                                else:
+                                    st.session_state["rooms_with_info"][edit_room_idx] = {
+                                        "Room Number": edit_room_no.strip(),
+                                        "Capacity": int(edit_capacity),
+                                    }
+                                    st.session_state["editing_room_index"] = None
+                                    st.rerun()
 
-        if add_subject:
-            if not subj_in.strip():
-                st.error("Subject is required.")
-            else:
-                st.session_state["exam_subjects"].append(
-                    {
-                        "subject": subj_in.strip(),
-                        "date": exam_date.strftime("%d-%b-%y"),
-                    }
-                )
+                        if cancel_room:
+                            st.session_state["editing_room_index"] = None
+                            st.rerun()
 
-    if st.session_state["exam_subjects"]:
-        st.caption("These columns will be added to attendance sheets.")
-        h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
-        h1.markdown("**#**")
-        h2.markdown("**Subject**")
-        h3.markdown("**Exam date**")
-        for idx, row in enumerate(st.session_state["exam_subjects"]):
-            c1, c2, c3, c4, c5 = st.columns([0.5, 3, 2, 1, 1])
-            c1.write(str(idx + 1))
-            c2.write(row.get("subject", ""))
-            c3.write(row.get("date", ""))
+                if st.button("Clear all rooms", key="clear_rooms"):
+                    st.session_state["rooms_with_info"] = []
+                    st.session_state["editing_room_index"] = None
+                    st.rerun()
 
-            if c4.button("Edit", key=f"edit_subject_{idx}"):
-                st.session_state["editing_subject_index"] = idx
-                st.rerun()
-            if c5.button("Delete", key=f"delete_subject_{idx}"):
-                st.session_state["exam_subjects"].pop(idx)
-                if st.session_state["editing_subject_index"] == idx:
-                    st.session_state["editing_subject_index"] = None
-                st.rerun()
+    with st.container(border=True):
+        st.subheader("3. Exam timetable")
 
-        edit_idx = st.session_state.get("editing_subject_index")
-        if edit_idx is not None and 0 <= edit_idx < len(st.session_state["exam_subjects"]):
-            st.markdown("Edit Selected Row")
-            current = st.session_state["exam_subjects"][edit_idx]
-            try:
-                current_date = datetime.strptime(current.get("date", "01-Jan-26"), "%d-%b-%y").date()
-            except ValueError:
-                current_date = datetime.today().date()
+        with st.form("add_subject_form", clear_on_submit=True, border=False):
+            s1, s2, s_btn = st.columns([2, 1.5, 0.8], vertical_alignment="bottom")
+            subj_in = s1.text_input("Subject", placeholder="CSIT-401 (M-III)")
+            exam_date = s2.date_input("Exam Date", key="subject_date_input")
+            add_subject = s_btn.form_submit_button("Add")
 
-            with st.form("edit_subject_form"):
-                e1, e2, e3, e4 = st.columns([2, 1.5, 1, 1])
-                edit_subject = e1.text_input("Subject", value=current.get("subject", ""), key="edit_subject_name")
-                edit_date = e2.date_input("Exam Date", value=current_date, key="edit_subject_date")
-                save_edit = e3.form_submit_button("Save")
-                cancel_edit = e4.form_submit_button("Cancel")
-
-                if save_edit:
-                    if not edit_subject.strip():
-                        st.error("Subject is required.")
-                    else:
-                        st.session_state["exam_subjects"][edit_idx] = {
-                            "subject": edit_subject.strip(),
-                            "date": edit_date.strftime("%d-%b-%y"),
+            if add_subject:
+                if not subj_in.strip():
+                    st.error("Subject is required.")
+                else:
+                    st.session_state["exam_subjects"].append(
+                        {
+                            "subject": subj_in.strip(),
+                            "date": exam_date.strftime("%d-%b-%y"),
                         }
+                    )
+
+        if st.session_state["exam_subjects"]:
+            st.caption("These columns will be added to attendance sheets.")
+            h1, h2, h3, _, _ = st.columns([0.5, 3, 2, 1, 1])
+            h1.markdown("**#**")
+            h2.markdown("**Subject**")
+            h3.markdown("**Exam date**")
+            for idx, row in enumerate(st.session_state["exam_subjects"]):
+                c1, c2, c3, c4, c5 = st.columns([0.5, 3, 2, 1, 1])
+                c1.write(str(idx + 1))
+                c2.write(row.get("subject", ""))
+                c3.write(row.get("date", ""))
+
+                if c4.button("Edit", key=f"edit_subject_{idx}"):
+                    st.session_state["editing_subject_index"] = idx
+                    st.rerun()
+                if c5.button("Delete", key=f"delete_subject_{idx}"):
+                    st.session_state["exam_subjects"].pop(idx)
+                    if st.session_state["editing_subject_index"] == idx:
+                        st.session_state["editing_subject_index"] = None
+                    st.rerun()
+
+            edit_idx = st.session_state.get("editing_subject_index")
+            if edit_idx is not None and 0 <= edit_idx < len(st.session_state["exam_subjects"]):
+                st.markdown("Edit Selected Row")
+                current = st.session_state["exam_subjects"][edit_idx]
+                try:
+                    current_date = datetime.strptime(current.get("date", "01-Jan-26"), "%d-%b-%y").date()
+                except ValueError:
+                    current_date = datetime.today().date()
+
+                with st.form("edit_subject_form", border=False):
+                    e1, e2, e3, e4 = st.columns([2, 1.5, 1, 1], vertical_alignment="bottom")
+                    edit_subject = e1.text_input("Subject", value=current.get("subject", ""), key="edit_subject_name")
+                    edit_date = e2.date_input("Exam Date", value=current_date, key="edit_subject_date")
+                    save_edit = e3.form_submit_button("Save")
+                    cancel_edit = e4.form_submit_button("Cancel")
+
+                    if save_edit:
+                        if not edit_subject.strip():
+                            st.error("Subject is required.")
+                        else:
+                            st.session_state["exam_subjects"][edit_idx] = {
+                                "subject": edit_subject.strip(),
+                                "date": edit_date.strftime("%d-%b-%y"),
+                            }
+                            st.session_state["editing_subject_index"] = None
+                            st.rerun()
+
+                    if cancel_edit:
                         st.session_state["editing_subject_index"] = None
                         st.rerun()
 
-                if cancel_edit:
-                    st.session_state["editing_subject_index"] = None
-                    st.rerun()
+            if st.button("Clear timetable", key="clear_subjects"):
+                st.session_state["exam_subjects"] = []
+                st.session_state["editing_subject_index"] = None
+                st.rerun()
 
-        if st.button("Clear timetable", key="clear_subjects"):
-            st.session_state["exam_subjects"] = []
-            st.session_state["editing_subject_index"] = None
-            st.rerun()
+    with st.container(border=True):
+        st.subheader("4. Options")
+        o1, o2, o3, o4 = st.columns(4, vertical_alignment="bottom")
+        attendance_cutoff = o1.number_input("Attendance cutoff (%)", 0.0, 100.0, 40.0, 1.0)
+        alt_seats = o2.checkbox("Alternate seats", help="Leave every other seat empty.")
+        shuffle = o3.checkbox("Shuffle students", help="Random order instead of roll-number order.")
+        seed = o4.number_input("Shuffle seed", 0, 99999, 42, 1, disabled=not shuffle)
 
-    st.divider()
-    st.subheader("4. Options")
-    o1, o2, o3, o4 = st.columns(4)
-    attendance_cutoff = o1.number_input("Attendance cutoff (%)", 0.0, 100.0, 40.0, 1.0)
-    shuffle = o2.checkbox("Shuffle students")
-    seed = o3.number_input("Seed", 0, 99999, 42, 1)
-    alt_seats = o4.checkbox("Alternate seats")
+        if not students_df.empty:
+            eligible_count = int((pd.to_numeric(students_df["Attendance Percentage"], errors="coerce") >= attendance_cutoff).sum())
+            active_rooms = (
+                uploaded_rooms_df.to_dict("records")
+                if rooms_method == "Upload rooms file" and not uploaded_rooms_df.empty
+                else st.session_state["rooms_with_info"]
+            )
+            total_capacity = sum(int(r["Capacity"]) for r in active_rooms)
+            effective_capacity = (
+                sum((int(r["Capacity"]) + 1) // 2 for r in active_rooms)
+                if alt_seats
+                else total_capacity
+            )
 
-    if not students_df.empty:
-        eligible_count = int((pd.to_numeric(students_df["Attendance Percentage"], errors="coerce") >= attendance_cutoff).sum())
-        active_rooms = (
-            uploaded_rooms_df.to_dict("records")
-            if rooms_method == "Upload rooms file" and not uploaded_rooms_df.empty
-            else st.session_state["rooms_with_info"]
-        )
-        total_capacity = sum(int(r["Capacity"]) for r in active_rooms)
-        effective_capacity = (
-            sum((int(r["Capacity"]) + 1) // 2 for r in active_rooms)
-            if alt_seats
-            else total_capacity
-        )
+            sm1, sm2, sm3 = st.columns(3)
+            sm1.metric("Eligible", eligible_count)
+            sm2.metric("Debarred", len(students_df) - eligible_count)
+            capacity_label = "Effective Capacity (Alternate Seats)" if alt_seats else "Total Room Capacity"
+            sm3.metric(capacity_label, effective_capacity if effective_capacity else "-")
 
-        sm1, sm2, sm3 = st.columns(3)
-        sm1.metric("Eligible", eligible_count)
-        sm2.metric("Debarred", len(students_df) - eligible_count)
-        capacity_label = "Effective Capacity (Alternate Seats)" if alt_seats else "Total Room Capacity"
-        sm3.metric(capacity_label, effective_capacity if effective_capacity else "-")
+            rooms_ok = bool(active_rooms) and effective_capacity >= eligible_count
+            if not active_rooms:
+                blocked_reason = "Add at least one room."
+            elif effective_capacity < eligible_count:
+                blocked_reason = (
+                    f"Room capacity ({effective_capacity}) is lower than the {eligible_count} eligible students."
+                )
+            else:
+                blocked_reason = ""
+        else:
+            rooms_ok = False
+            blocked_reason = "Upload a students file first."
 
-        rooms_ok = bool(active_rooms) and effective_capacity >= eligible_count
-    else:
-        rooms_ok = False
-
-    st.divider()
     pin_slot = st.empty()
     show_active_pin(pin_slot)
     subject_names = [s["subject"] for s in st.session_state["exam_subjects"]]
-    mk1, mk2 = st.columns([3, 1])
-    open_marks = mk1.checkbox(
-        "Also open marks entry for the eligible students (creates a PIN for teachers)",
-        disabled=not subject_names,
-        help="Teachers use the PIN on the separate Marks Entry page to enter marks for any subject.",
+    with st.container(border=True):
+        st.subheader("Marks entry (optional)")
+        mk1, mk2 = st.columns([3, 1], vertical_alignment="bottom")
+        open_marks = mk1.checkbox(
+            "Open marks entry for the eligible students",
+            disabled=not subject_names,
+            help="Creates a PIN. Teachers use it on the Marks Entry page to enter marks for any subject.",
+        )
+        marks_max = mk2.number_input("Max marks", min_value=1.0, value=30.0, step=1.0, disabled=not open_marks)
+        if not subject_names:
+            st.caption("Add subjects in step 3 to enable this.")
+
+    generate = st.button(
+        "Generate seating plan", type="primary", icon=":material/event_seat:",
+        use_container_width=True, disabled=not rooms_ok,
     )
-    marks_max = mk2.number_input("Max marks", min_value=1.0, value=30.0, step=1.0, disabled=not open_marks)
-    if not subject_names:
-        st.caption("Add subjects in step 3 to enable marks entry.")
-    if not st.button("Generate Seating Plan", type="primary", use_container_width=True, disabled=not rooms_ok):
+    if blocked_reason and not generate:
+        st.caption(blocked_reason)
+    if not generate:
         return
 
     if students_df.empty:
