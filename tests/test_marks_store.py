@@ -207,3 +207,28 @@ def test_wrong_pins_from_any_browser_are_limited_globally(opened, monkeypatch):
     later = datetime.now() + timedelta(minutes=marks_store.FAILED_PIN_WINDOW_MINUTES + 1)
     monkeypatch.setattr(marks_store, "_now", lambda: later)
     assert marks_store.find_session(pin) == session
+
+
+def test_result_analysis_can_load_a_marks_session_by_pin(opened):
+    from streamlit.testing.v1 import AppTest
+
+    pin, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    table = marks_store.get_marks_table(session.id, maths.id)
+    table["Marks"] = [28.0, 12.0, 20.0]
+    marks_store.save_marks(session, maths.id, table, "Prof A")
+
+    app = AppTest.from_string(
+        "from ui.tab_result_analysis import render_tab_result_analysis\n"
+        "render_tab_result_analysis()",
+        default_timeout=40,
+    ).run()
+    app.radio[0].set_value("Marks entry session (PIN)").run()
+    app.text_input[-1].set_value(pin)
+    next(b for b in app.button if b.label == "Load marks").click().run()
+    next(b for b in app.button if b.label == "Add all session subjects").click().run()
+    next(b for b in app.button if b.label == "Generate Result Analysis").click().run()
+
+    assert not app.exception and not app.error
+    assert [s["subject"] for s in app.session_state["ra_subjects"]] == ["Maths", "Physics"]
+    assert "Download Section-wise Excel" in [d.label for d in app.get("download_button")]

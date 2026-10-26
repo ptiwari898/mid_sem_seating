@@ -5,6 +5,8 @@ import io
 import pandas as pd
 import streamlit as st
 
+from exam_seating import marks_store
+
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CSV_MIME  = "text/csv"
 
@@ -155,17 +157,41 @@ def render_tab_result_analysis() -> None:
 
     # ── Data Source Selection ─────────────────────────────────────────────────
     st.subheader("Data Source")
-    use_saved_data = st.checkbox(
-        "Use saved student data from Data & Marks Management",
-        help="Toggle to use student data saved in the Data & Marks Management tab instead of uploading a file"
+    source = st.radio(
+        "Where is the data?",
+        ["Upload a file", "Saved student data", "Marks entry session (PIN)"],
+        horizontal=True,
+        key="ra_source",
     )
+    use_saved_data = source != "Upload a file"  # roll/name columns are known, no mapping needed
 
     # Initialize session state for data management functions if needed
     if "saved_students" not in st.session_state:
         st.session_state["saved_students"] = pd.DataFrame()
 
     # Handle data loading based on selection
-    if use_saved_data:
+    if source == "Marks entry session (PIN)":
+        pin = st.text_input("Session PIN", type="password", max_chars=6, key="ra_marks_pin")
+        if st.button("Load marks", key="ra_load_marks"):
+            try:
+                found = marks_store.find_session(pin) if pin.strip() else None
+            except marks_store.MarksError as exc:
+                st.error(str(exc))
+                return
+            if found is None:
+                st.error("Invalid or expired PIN.")
+            else:
+                st.session_state["ra_marks_df"] = marks_store.export_marks(found.id)
+                st.session_state["ra_marks_title"] = found.exam_title
+        df = st.session_state.get("ra_marks_df")
+        if df is None:
+            st.info("Enter the PIN and press Load marks.")
+            return
+        st.success(f"Loaded marks for {len(df)} students: {st.session_state['ra_marks_title']}")
+        st.dataframe(df.head(10), use_container_width=True)
+        roll_col = "Roll Number"
+        name_col = "Name"
+    elif source == "Saved student data":
         # Use saved student data
         df = st.session_state["saved_students"].copy()
         if df.empty:
@@ -243,6 +269,13 @@ def render_tab_result_analysis() -> None:
         roll_col = "Roll Number"
         name_col = "Name"
         all_cols = ["Roll Number", "Name"] + [c for c in df.columns if c not in ["Roll Number", "Name"]]
+        if source == "Marks entry session (PIN)" and st.button(
+            "Add all session subjects", key="ra_add_all_subjects"
+        ):
+            known = {s["col"] for s in st.session_state.setdefault("ra_subjects", [])}
+            for col in all_cols[2:]:
+                if col not in known:
+                    st.session_state["ra_subjects"].append({"subject": col, "faculty": "", "col": col})
     else:
         # For uploaded files, detect columns
         detected = _detect_columns(list(df.columns))
