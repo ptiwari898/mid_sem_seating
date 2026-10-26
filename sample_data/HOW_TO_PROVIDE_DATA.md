@@ -1,7 +1,8 @@
 # How to Provide Data
 
-The app has two pages. **Seating & Results** has the tabs **Seating Plan**, **Result Analysis** and
-**Data & Coordinator**. **Marks Entry** (`/marks-entry`) is a separate page for teachers.
+The app has three pages. **Seating & Results** has the tabs **Seating Plan**, **Result Analysis** and
+**Saved Students**. **Marks Entry** (`/marks-entry`) is a separate page for teachers, and **Admin**
+(`/admin`) is the password-protected page for the coordinator.
 
 ## 1. Student file
 
@@ -28,26 +29,26 @@ All three are read as 82. See `students.csv` for an example.
 After 5 wrong PINs from one browser, that form locks for 15 minutes. Across all browsers, 30 wrong
 PINs in 15 minutes pause every PIN check.
 
-## 4. Coordinator tasks
+## 4. Admin page
 
-Set `ADMIN_PASSWORD` in the app secrets (`.streamlit/secrets.toml` locally, the Secrets
-panel on Streamlit Cloud). Then, in the **Data & Coordinator** tab under **Coordinator: Marks Sessions**, you can:
+Set `ADMIN_PASSWORD` in the app secrets (`.streamlit/secrets.toml` locally, the Secrets panel on
+Streamlit Cloud), then open `/admin` (also linked from the sidebar of the Seating & Results page).
 
-- see each session's PIN and progress (useful if the PIN was lost)
-- download the marks, or the full edit history, as CSV
-- **Lock (finalise)** a session so no more changes are accepted, or unlock it
-- delete a session
-- download or restore a full backup of the marks database
+- **Seating plans**: every plan you generated, with student counts, per-room allocation, the linked
+  marks entry, and a download of all reports as a zip.
+- **Marks entries**: each session's PIN (useful if it was lost), progress per subject, all marks,
+  CSV downloads for the marks and the edit history, **Lock (finalise)** / unlock, and delete.
+- **Backup**: download or restore the whole database.
 
-The database file (`marks_sessions.db`) can be lost when a cloud host restarts the app,
-so download a backup after each marks round.
+Deleting needs the "I am sure" box ticked first. The database file (`marks_sessions.db`) can be lost
+when a cloud host restarts the app, so download a backup after each round.
 
 ## 5. Result analysis
 
 In **Result Analysis**, choose where the data comes from:
 
 - **Upload a file** (see `sample_results.csv` and `result_analysis_template.csv`)
-- **Saved student data** from the Data & Coordinator tab
+- **Saved student data** from the Saved Students tab
 - **Marks entry session (PIN)**: loads every subject's marks; press **Add all session subjects**
   to create the subject list. Absent students show as `AB` and count as not appeared.
 
@@ -62,4 +63,4 @@ press **Generate Result Analysis**.
 | Everyone is ineligible | Check the attendance column; values should be 0-100 or percent cells. |
 | "Invalid or expired PIN" | PINs expire after 7 days; ask the coordinator for the PIN. |
 | "Marks entry is locked" | The coordinator finalised the session; ask them to unlock it. |
-| Marks gone after a restart | Restore the backup from the Coordinator panel. |
+| Marks gone after a restart | Restore the backup on the Admin page (Backup tab). |

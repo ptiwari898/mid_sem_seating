@@ -26,7 +26,7 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Summary report (text)
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
-- Streamlit web app with two pages: Seating & Results (tabs: Seating Plan, Result Analysis, Data & Coordinator) and a separate Marks Entry page for teachers.
+- Streamlit web app with three pages: Seating & Results (tabs: Seating Plan, Result Analysis, Saved Students), a separate Marks Entry page for teachers (`/marks-entry`), and a password-protected Admin page (`/admin`).
 - Institute-style Excel reports: main seating sheet, debarred list and section-wise attendance sheets.
 - Attendance written as `82`, `82%` or an Excel percent cell (0.82) is read as 82.
 - Optional PIN-based marks entry for the eligible students (see below).
@@ -37,14 +37,15 @@ A complete Python-based system to automate exam seating arrangement using studen
 Tick "Also open marks entry" when generating a plan to get a 6-digit PIN. Teachers open the separate
 **Marks Entry** page (`/marks-entry`; the coordinator page links to it, the page itself has no link back to the seating page), enter the PIN, pick any subject (and section)
 and enter marks for the eligible students.
-The coordinator can recover the PIN, lock the marks, download marks and edit history, and back up the
-database. See [sample_data/HOW_TO_PROVIDE_DATA.md](sample_data/HOW_TO_PROVIDE_DATA.md).
+The **Admin** page (`/admin`) lists every generated seating plan (with its reports as a zip) and every marks
+entry (PIN, progress per subject, all marks). The admin can lock the marks, download marks and edit history,
+delete old records, and back up the database. See [sample_data/HOW_TO_PROVIDE_DATA.md](sample_data/HOW_TO_PROVIDE_DATA.md).
 
 ## Configuration
 
 | Setting | Where | Purpose |
 |---------|-------|---------|
-| `ADMIN_PASSWORD` | Streamlit secrets | Unlocks the Coordinator panel. Not set means the panel stays disabled. |
+| `ADMIN_PASSWORD` | Streamlit secrets | Unlocks the Admin page. If it is not set, the page stays disabled. |
 | `MARKS_DB_PATH` | Environment variable | Location of the marks database (default `marks_sessions.db`). |
 | `API_KEY` | Environment variable (Vercel) | Requires an `X-API-Key` header on the API endpoints. |
 
@@ -82,8 +83,8 @@ Then open the local URL shown in terminal (usually `http://localhost:8501`) and:
 streamlit_app.py    Streamlit entry point (run.py launches it)
 gui.py              Optional Tkinter desktop app
 api/                FastAPI app deployed on Vercel
-exam_seating/       Core logic: loading, allocation, exports, marks_store (SQLite)
-ui/                 Streamlit tabs and helpers
+exam_seating/       Core logic: loading, allocation, exports, marks_store (SQLite: plans and marks)
+ui/                 Streamlit tabs, pages and helpers
 tests/              pytest suite
 sample_data/        Example input files
 docs/               Extra documentation

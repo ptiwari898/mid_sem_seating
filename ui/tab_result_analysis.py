@@ -196,8 +196,8 @@ def render_tab_result_analysis() -> None:
         # Use saved student data
         df = st.session_state["saved_students"].copy()
         if df.empty:
-            st.warning("⚠️ No student data saved yet. Please go to Data & Coordinator tab to save student data first.")
-            st.info("💡 Save your student data in the Data & Coordinator tab, then return here and toggle this option.")
+            st.warning("⚠️ No student data saved yet. Please go to Saved Students tab to save student data first.")
+            st.info("💡 Save your student data in the Saved Students tab, then return here and toggle this option.")
             return
         else:
             # Validate required columns
@@ -205,7 +205,7 @@ def render_tab_result_analysis() -> None:
             if not required_cols.issubset(set(df.columns)):
                 missing = required_cols - set(df.columns)
                 st.error(f"❌ Saved student data missing required columns: {', '.join(missing)}")
-                st.info("Please re-save valid student data in the Data & Coordinator tab.")
+                st.info("Please re-save valid student data in the Saved Students tab.")
                 return
             else:
                 st.success(f"✅ Using saved student data: {len(df)} students loaded")
