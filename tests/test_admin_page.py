@@ -32,10 +32,9 @@ def data():
     return pin, session, plan_id
 
 
-def _admin(password: str | None = "pw") -> AppTest:
+def _admin(password: str = "pw") -> AppTest:
     app = AppTest.from_string(PAGE, default_timeout=30)
-    if password is not None:
-        app.secrets["ADMIN_PASSWORD"] = password
+    app.secrets["ADMIN_PASSWORD"] = password  # always set, so a real local secrets file never leaks in
     return app.run()
 
 
@@ -46,7 +45,7 @@ def _unlock(app: AppTest, typed: str = "pw") -> AppTest:
 
 
 def test_page_is_disabled_without_an_admin_password(data):
-    app = _admin(password=None)
+    app = _admin(password="")
     assert not app.exception
     assert "ADMIN_PASSWORD" in app.info[0].value
     assert not app.tabs
