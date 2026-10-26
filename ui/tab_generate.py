@@ -12,9 +12,14 @@ from exam_seating.sirt_exporters import (
     export_sirt_debarred_excel,
     export_sirt_main_seating_excel,
 )
-from ui.runtime import create_new_run_dirs, load_rooms_from_upload, load_students_from_upload
+from ui.runtime import (
+    ZIP_MIME,
+    bundle_reports_zip,
+    create_new_run_dirs,
+    load_rooms_from_upload,
+    load_students_from_upload,
+)
 from ui.templates import XLSX_MIME, make_students_template
-from utils.workbook import ZIP_MIME, bundle_reports_zip
 
 
 def render_tab_generate(info: dict) -> None:

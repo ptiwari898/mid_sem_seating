@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import io
-import os
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -10,8 +9,6 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-
-import pandas as pd
 
 from exam_seating.allocator import allocate_students_to_rooms, split_eligibility
 from exam_seating.exporters import (

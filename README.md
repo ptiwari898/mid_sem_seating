@@ -88,6 +88,19 @@ Then open the local URL shown in terminal (usually `http://localhost:8501`) and:
 - Click **Generate Seating Plan**
 - Download generated reports directly from the page
 
+## Project Structure
+
+```
+streamlit_app.py    Streamlit entry point (run.py launches it)
+gui.py              Optional Tkinter desktop app
+api/                FastAPI app deployed on Vercel
+exam_seating/       Core logic: loading, allocation, exports
+ui/                 Streamlit tabs and helpers
+tests/              pytest suite
+sample_data/        Example input files
+docs/               Extra documentation
+```
+
 ## Output Files
 
 Generated in output folder:

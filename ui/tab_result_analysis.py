@@ -180,8 +180,6 @@ def render_tab_result_analysis() -> None:
                 # For saved data, we know the columns
                 roll_col = "Roll Number"
                 name_col = "Name"
-                # Set a flag to skip file upload processing
-                is_saved_data = True
     else:
         # ── File Upload ────────────────────────────────────────────────────────────
         uploaded = st.file_uploader(
@@ -227,8 +225,6 @@ def render_tab_result_analysis() -> None:
         df.columns = [str(c).strip() for c in df.columns]
         st.subheader("Preview (after sheet selection)")
         st.dataframe(df.head(10), use_container_width=True)
-        # Set flag for file upload path
-        is_saved_data = False
 
     # ── Column Mapping ─────────────────────────────────────────────────────────
     st.subheader("Column Mapping")

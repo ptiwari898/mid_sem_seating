@@ -1,6 +1,4 @@
 -r requirements-prod.txt
 streamlit==1.44.*
-bcrypt==4.1.*
-plotly==5.18.*
 pytest>=8
 httpx<0.28

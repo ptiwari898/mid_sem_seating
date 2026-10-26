@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import re
 import shutil
 import time
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +15,7 @@ from exam_seating.io_utils import DataValidationError, load_rooms, load_students
 
 WEB_RUNS_DIR = Path("web_runs")
 RUN_RETENTION_SECONDS = 3600
+ZIP_MIME = "application/zip"
 
 
 def cleanup_old_web_runs(retention_seconds: int = RUN_RETENTION_SECONDS) -> None:
@@ -132,3 +135,12 @@ def create_new_run_dirs() -> tuple[Path, Path, Path]:
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     return base_dir, input_dir, output_dir
+
+
+def bundle_reports_zip(paths: list[Path], archive_names: list[str]) -> bytes:
+    """Bundle generated reports into a single zip download without rewriting workbooks."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path, archive_name in zip(paths, archive_names):
+            zf.writestr(archive_name, path.read_bytes())
+    return buf.getvalue()
