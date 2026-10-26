@@ -21,10 +21,18 @@ def lockout_seconds_left(
     return max(0, int(LOCKOUT_SECONDS - elapsed))
 
 
-def show_active_pin() -> None:
-    """Remind the coordinator of the PIN made in this browser session."""
+def show_active_pin(slot=None) -> None:
+    """Remind the coordinator of the PIN made in this browser session.
+
+    Pass the same st.empty() slot on every call in one run: a later call replaces
+    the earlier output. The download button gets a fresh key each call because
+    Streamlit rejects a repeated key within one run even when the slot is replaced.
+    """
     info = st.session_state.get("marks_session_info")
-    if info:
+    if not info:
+        return
+    st.session_state["_marks_pin_renders"] = st.session_state.get("_marks_pin_renders", 0) + 1
+    with (slot.container() if slot is not None else st.container()):
         st.info(
             f"Marks entry is open for **{info['exam_title']}**. "
             f"Teacher PIN: **{info['pin']}** (valid {marks_store.SESSION_DAYS} days). "
@@ -36,11 +44,12 @@ def show_active_pin() -> None:
             data=marks.to_csv(index=False).encode("utf-8"),
             file_name="marks_entered.csv",
             mime="text/csv",
+            key=f"marks_csv_download_{st.session_state['_marks_pin_renders']}",
         )
 
 
 def open_marks_session(
-    exam_title: str, subjects: list[str], eligible: pd.DataFrame, max_marks: float
+    exam_title: str, subjects: list[str], eligible: pd.DataFrame, max_marks: float, slot=None
 ) -> None:
     """Create the session from the eligible students and show its PIN."""
     try:
@@ -53,7 +62,7 @@ def open_marks_session(
     st.session_state["marks_session_info"] = {
         "pin": pin, "exam_title": session.exam_title, "session_id": session.id,
     }
-    show_active_pin()
+    show_active_pin(slot)
 
 
 def render_teacher_marks_entry() -> None:

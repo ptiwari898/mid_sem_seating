@@ -322,7 +322,8 @@ def render_tab_generate(info: dict) -> None:
         rooms_ok = False
 
     st.divider()
-    show_active_pin()
+    pin_slot = st.empty()
+    show_active_pin(pin_slot)
     subject_names = [s["subject"] for s in st.session_state["exam_subjects"]]
     mk1, mk2 = st.columns([3, 1])
     open_marks = mk1.checkbox(
@@ -438,7 +439,7 @@ def render_tab_generate(info: dict) -> None:
     ].reset_index(drop=True)
 
     if open_marks:
-        open_marks_session(info["exam_title"], subject_names, eligible_for_att, float(marks_max))
+        open_marks_session(info["exam_title"], subject_names, eligible_for_att, float(marks_max), pin_slot)
 
     sirt_att_path = export_sirt_attendance_sheets_excel(
         eligible_for_att,
