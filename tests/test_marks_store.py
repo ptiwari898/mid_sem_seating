@@ -158,8 +158,40 @@ def test_coordinator_can_list_sessions_with_progress_and_delete_one(opened):
     marks_store.save_marks(session, maths.id, table, "Prof A")
 
     (item,) = marks_store.list_sessions()
-    assert (item.pin, item.entries, item.slots, item.expired) == (pin, 2, 6, False)
+    assert (item.pin, item.entries, item.slots, item.expired, item.locked) == (pin, 2, 6, False, False)
 
     marks_store.delete_session(session.id)
     assert marks_store.list_sessions() == []
     assert marks_store.find_session(pin) is None
+
+
+def test_locked_session_refuses_changes_until_unlocked(opened):
+    _, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    start = marks_store.get_marks_table(session.id, maths.id)
+    table = start.copy()
+    table.loc[0, "Marks"] = 10.0
+    marks_store.set_locked(session.id, True)
+    with pytest.raises(marks_store.MarksError, match="locked"):
+        marks_store.save_marks(session, maths.id, table, "Prof A", original=start)
+    marks_store.set_locked(session.id, False)
+    assert marks_store.save_marks(session, maths.id, table, "Prof A", original=start) == 1
+
+
+def test_every_change_is_kept_in_the_history(opened):
+    _, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    blank = marks_store.get_marks_table(session.id, maths.id)
+    first = blank.copy()
+    first.loc[0, "Marks"] = 10.0
+    marks_store.save_marks(session, maths.id, first, "Prof A", original=blank)
+    loaded = marks_store.get_marks_table(session.id, maths.id)
+    changed = loaded.copy()
+    changed.loc[0, "Marks"] = 14.0
+    marks_store.save_marks(session, maths.id, changed, "Prof B", original=loaded)
+
+    history = marks_store.export_history(session.id)
+    assert pd.isna(history["Old Marks"][0])
+    assert history["New Marks"].tolist() == [10.0, 14.0]
+    assert history["Old Marks"][1] == 10.0
+    assert history["Entered By"].tolist() == ["Prof A", "Prof B"]

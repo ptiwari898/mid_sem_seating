@@ -39,6 +39,7 @@ class SessionSummary:
     exam_title: str
     created_at: str
     expired: bool
+    locked: bool
     entries: int  # marks or absences saved, across all subjects
     slots: int  # students x subjects
 
@@ -61,7 +62,8 @@ def _connect():
             pin        TEXT NOT NULL UNIQUE,
             exam_title TEXT NOT NULL,
             max_marks  REAL NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            locked     INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS subjects (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +79,17 @@ def _connect():
             branch     TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (session_id, roll_no)
         );
+        CREATE TABLE IF NOT EXISTS marks_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+            roll_no    TEXT NOT NULL,
+            old_marks  REAL,
+            old_absent INTEGER NOT NULL,
+            new_marks  REAL,
+            new_absent INTEGER NOT NULL,
+            entered_by TEXT NOT NULL,
+            at         TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS marks (
             subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
             roll_no    TEXT NOT NULL,
@@ -88,11 +101,15 @@ def _connect():
         );
         """
     )
-    # Databases made before sections existed need the two extra columns.
-    have = {row[1] for row in conn.execute("PRAGMA table_info(students)")}
-    for column in ("section", "branch"):
+    # Databases made by older versions are missing some columns.
+    for table, column, ddl in (
+        ("students", "section", "TEXT NOT NULL DEFAULT ''"),
+        ("students", "branch", "TEXT NOT NULL DEFAULT ''"),
+        ("sessions", "locked", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in have:
-            conn.execute(f"ALTER TABLE students ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
     try:
         yield conn
         conn.commit()
@@ -175,6 +192,7 @@ def list_sessions() -> list[SessionSummary]:
         rows = conn.execute(
             """
             SELECT s.id, s.pin, s.exam_title, s.created_at,
+                   s.locked,
                    (SELECT COUNT(*) FROM marks m JOIN subjects u ON u.id = m.subject_id
                      WHERE u.session_id = s.id AND (m.marks IS NOT NULL OR m.is_absent = 1)),
                    (SELECT COUNT(*) FROM students t WHERE t.session_id = s.id)
@@ -182,7 +200,38 @@ def list_sessions() -> list[SessionSummary]:
             FROM sessions s ORDER BY s.id DESC
             """
         ).fetchall()
-    return [SessionSummary(r[0], r[1], r[2], r[3], r[3] < oldest, r[4], r[5]) for r in rows]
+    return [
+        SessionSummary(r[0], r[1], r[2], r[3], r[3] < oldest, bool(r[4]), r[5], r[6]) for r in rows
+    ]
+
+
+def is_locked(session_id: int) -> bool:
+    with _connect() as conn:
+        row = conn.execute("SELECT locked FROM sessions WHERE id = ?", (session_id,)).fetchone()
+    return bool(row and row[0])
+
+
+def set_locked(session_id: int, locked: bool) -> None:
+    """Finalise (or reopen) a session: while locked, no marks can be saved."""
+    with _connect() as conn:
+        conn.execute("UPDATE sessions SET locked = ? WHERE id = ?", (int(locked), session_id))
+
+
+def export_history(session_id: int) -> pd.DataFrame:
+    """Every change to a mark in the session, oldest first."""
+    with _connect() as conn:
+        return pd.read_sql_query(
+            """
+            SELECT l.at AS "When", u.name AS "Subject", l.roll_no AS "Roll Number",
+                   l.old_marks AS "Old Marks", l.old_absent AS "Old Absent",
+                   l.new_marks AS "New Marks", l.new_absent AS "New Absent",
+                   l.entered_by AS "Entered By"
+            FROM marks_log l JOIN subjects u ON u.id = l.subject_id
+            WHERE u.session_id = ? ORDER BY l.id
+            """,
+            conn,
+            params=(session_id,),
+        )
 
 
 def delete_session(session_id: int) -> None:
@@ -269,6 +318,19 @@ def save_marks(
         ).fetchone()
         if owner is None or owner[0] != session.id:
             raise MarksError("Unknown subject for this session.")
+        locked = conn.execute("SELECT locked FROM sessions WHERE id = ?", (session.id,)).fetchone()
+        if locked and locked[0]:
+            raise MarksError("Marks entry is locked by the coordinator.")
+        for subject, roll, value, absent, who, when in rows:
+            old = conn.execute(
+                "SELECT marks, is_absent FROM marks WHERE subject_id = ? AND roll_no = ?",
+                (subject, roll),
+            ).fetchone() or (None, 0)
+            conn.execute(
+                "INSERT INTO marks_log (subject_id, roll_no, old_marks, old_absent, new_marks, "
+                "new_absent, entered_by, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (subject, roll, old[0], old[1], value, absent, who, when),
+            )
         conn.executemany(
             """
             INSERT INTO marks (subject_id, roll_no, marks, is_absent, entered_by, updated_at)

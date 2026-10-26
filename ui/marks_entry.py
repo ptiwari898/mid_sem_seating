@@ -99,6 +99,9 @@ def render_teacher_marks_entry() -> None:
         st.session_state.pop("teacher_marks_session")
         st.rerun()
 
+    locked = marks_store.is_locked(session.id)
+    if locked:
+        st.warning("Marks entry is locked by the coordinator. You can view marks but not change them.")
     subjects = marks_store.list_subjects(session.id)
     subject = st.selectbox(
         "Subject (all subjects are listed)", subjects, format_func=lambda s: s.name, key="tm_subject"
@@ -120,7 +123,7 @@ def render_teacher_marks_entry() -> None:
         key=f"tm_editor_{session.id}_{subject.id}_{section}",
         hide_index=True,
         use_container_width=True,
-        disabled=["Roll Number", "Name", "Branch", "Section"],
+        disabled=True if locked else ["Roll Number", "Name", "Branch", "Section"],
         column_config={
             "Marks": st.column_config.NumberColumn(
                 "Marks", min_value=0.0, max_value=float(session.max_marks), step=0.5
@@ -128,7 +131,7 @@ def render_teacher_marks_entry() -> None:
             "Absent": st.column_config.CheckboxColumn("Absent"),
         },
     )
-    if st.button("💾 Save Marks", type="primary", key="tm_save"):
+    if st.button("💾 Save Marks", type="primary", key="tm_save", disabled=locked):
         if not teacher.strip():
             st.error("Enter your name before saving.")
             return
@@ -175,14 +178,14 @@ def render_coordinator_panel() -> None:
         st.info("No marks sessions yet. Tick the marks-entry option when generating a seating plan.")
         return
     for item in sessions:
-        status = "expired" if item.expired else "open"
+        status = "locked" if item.locked else ("expired" if item.expired else "open")
         with st.expander(f"{item.exam_title} — created {item.created_at} ({status})"):
             st.write(f"PIN: **{item.pin}**")
             st.progress(
                 item.entries / item.slots if item.slots else 0.0,
                 text=f"{item.entries} of {item.slots} entries done",
             )
-            c1, c2 = st.columns(2)
+            c1, c2, c3, c4 = st.columns(4)
             c1.download_button(
                 "Download marks (CSV)",
                 data=marks_store.export_marks(item.id).to_csv(index=False).encode("utf-8"),
@@ -190,6 +193,16 @@ def render_coordinator_panel() -> None:
                 mime="text/csv",
                 key=f"co_dl_{item.id}",
             )
-            if c2.button("Delete session", key=f"co_del_{item.id}"):
+            c2.download_button(
+                "Edit history (CSV)",
+                data=marks_store.export_history(item.id).to_csv(index=False).encode("utf-8"),
+                file_name=f"marks_history_{item.id}.csv",
+                mime="text/csv",
+                key=f"co_hist_{item.id}",
+            )
+            if c3.button("Unlock" if item.locked else "Lock (finalise)", key=f"co_lock_{item.id}"):
+                marks_store.set_locked(item.id, not item.locked)
+                st.rerun()
+            if c4.button("Delete session", key=f"co_del_{item.id}"):
                 marks_store.delete_session(item.id)
                 st.rerun()
