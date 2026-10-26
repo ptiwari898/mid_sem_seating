@@ -33,6 +33,17 @@ class MarksSession:
 
 
 @dataclass(frozen=True)
+class SessionSummary:
+    id: int
+    pin: str
+    exam_title: str
+    created_at: str
+    expired: bool
+    entries: int  # marks or absences saved, across all subjects
+    slots: int  # students x subjects
+
+
+@dataclass(frozen=True)
 class Subject:
     id: int
     name: str
@@ -155,6 +166,28 @@ def find_session(pin: str) -> MarksSession | None:
             (pin.strip(), oldest),
         ).fetchone()
     return None if row is None else MarksSession(row[0], row[1], row[2])
+
+
+def list_sessions() -> list[SessionSummary]:
+    """Every session, newest first, with how much marks entry is done. For the coordinator."""
+    oldest = (_now() - timedelta(days=SESSION_DAYS)).strftime(_TIME_FORMAT)
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.id, s.pin, s.exam_title, s.created_at,
+                   (SELECT COUNT(*) FROM marks m JOIN subjects u ON u.id = m.subject_id
+                     WHERE u.session_id = s.id AND (m.marks IS NOT NULL OR m.is_absent = 1)),
+                   (SELECT COUNT(*) FROM students t WHERE t.session_id = s.id)
+                   * (SELECT COUNT(*) FROM subjects u WHERE u.session_id = s.id)
+            FROM sessions s ORDER BY s.id DESC
+            """
+        ).fetchall()
+    return [SessionSummary(r[0], r[1], r[2], r[3], r[3] < oldest, r[4], r[5]) for r in rows]
+
+
+def delete_session(session_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
 
 def list_subjects(session_id: int) -> list[Subject]:

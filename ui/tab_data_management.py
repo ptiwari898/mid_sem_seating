@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from exam_seating.io_utils import parse_attendance
-from ui.marks_entry import render_teacher_marks_entry
+from ui.marks_entry import render_coordinator_panel, render_teacher_marks_entry
 
 
 # ── Initialisation ────────────────────────────────────────────────
@@ -134,6 +134,9 @@ def render_tab_data_management() -> None:
     # -----------------------------------------------------------------
     st.divider()
     render_teacher_marks_entry()
+
+    st.divider()
+    render_coordinator_panel()
 
     # -----------------------------------------------------------------
     # C. Saved student data

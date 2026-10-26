@@ -147,3 +147,19 @@ def test_sections_filter_the_roster_and_old_databases_are_upgraded(tmp_path, mon
     only_a = marks_store.get_marks_table(session.id, maths.id, "A")
     assert only_a["Roll Number"].tolist() == ["1", "3"]
     assert marks_store.get_marks_table(session.id, maths.id)["Roll Number"].tolist() == ["1", "2", "3"]
+
+
+def test_coordinator_can_list_sessions_with_progress_and_delete_one(opened):
+    pin, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    table = marks_store.get_marks_table(session.id, maths.id)
+    table.loc[0, "Marks"] = 12.0
+    table.loc[1, "Absent"] = True
+    marks_store.save_marks(session, maths.id, table, "Prof A")
+
+    (item,) = marks_store.list_sessions()
+    assert (item.pin, item.entries, item.slots, item.expired) == (pin, 2, 6, False)
+
+    marks_store.delete_session(session.id)
+    assert marks_store.list_sessions() == []
+    assert marks_store.find_session(pin) is None

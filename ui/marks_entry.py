@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import time
 
 import pandas as pd
@@ -137,3 +138,58 @@ def render_teacher_marks_entry() -> None:
             st.error(str(exc))
             return
         st.success(f"Saved {saved} changed row(s) in {subject.name}.")
+
+
+def render_coordinator_panel() -> None:
+    """Coordinator view: find a lost PIN, download marks, delete a session. Needs ADMIN_PASSWORD."""
+    st.subheader("🗂️ Coordinator: Marks Sessions")
+    password = st.secrets.get("ADMIN_PASSWORD")
+    if not password:
+        st.caption("Set ADMIN_PASSWORD in the app secrets to manage marks sessions.")
+        return
+
+    if not st.session_state.get("coordinator_ok"):
+        typed = st.text_input("Coordinator password", type="password", key="co_password")
+        if st.button("Unlock", key="co_unlock"):
+            wait = lockout_seconds_left(
+                st.session_state.get("co_failed", 0), st.session_state.get("co_last_failure", 0.0)
+            )
+            if wait:
+                st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min.")
+            elif hmac.compare_digest(typed.encode("utf-8"), str(password).encode("utf-8")):
+                st.session_state["co_failed"] = 0
+                st.session_state["coordinator_ok"] = True
+                st.rerun()
+            else:
+                st.session_state["co_failed"] = st.session_state.get("co_failed", 0) + 1
+                st.session_state["co_last_failure"] = time.time()
+                st.error("Wrong password.")
+        return
+
+    if st.button("Lock", key="co_lock"):
+        st.session_state["coordinator_ok"] = False
+        st.rerun()
+
+    sessions = marks_store.list_sessions()
+    if not sessions:
+        st.info("No marks sessions yet. Tick the marks-entry option when generating a seating plan.")
+        return
+    for item in sessions:
+        status = "expired" if item.expired else "open"
+        with st.expander(f"{item.exam_title} — created {item.created_at} ({status})"):
+            st.write(f"PIN: **{item.pin}**")
+            st.progress(
+                item.entries / item.slots if item.slots else 0.0,
+                text=f"{item.entries} of {item.slots} entries done",
+            )
+            c1, c2 = st.columns(2)
+            c1.download_button(
+                "Download marks (CSV)",
+                data=marks_store.export_marks(item.id).to_csv(index=False).encode("utf-8"),
+                file_name=f"marks_{item.id}.csv",
+                mime="text/csv",
+                key=f"co_dl_{item.id}",
+            )
+            if c2.button("Delete session", key=f"co_del_{item.id}"):
+                marks_store.delete_session(item.id)
+                st.rerun()
