@@ -27,6 +27,7 @@ A complete Python-based system to automate exam seating arrangement using studen
   - Excel workbook with separate sheets for each room
 - Optional PDF export for room-wise seating plan.
 - Streamlit web app.
+- Optional marks entry: after generating a plan, tick "open marks entry" to get a PIN. Teachers enter the PIN in the Data & Marks Management tab, pick any subject and enter marks for the eligible students. Data is stored in `marks_sessions.db` (ignored by git; set `MARKS_DB_PATH` to change it).
 
 ## Input Format
 

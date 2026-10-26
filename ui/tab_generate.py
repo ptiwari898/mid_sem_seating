@@ -12,6 +12,7 @@ from exam_seating.sirt_exporters import (
     export_sirt_debarred_excel,
     export_sirt_main_seating_excel,
 )
+from ui.marks_entry import open_marks_session, show_active_pin
 from ui.runtime import (
     ZIP_MIME,
     bundle_reports_zip,
@@ -321,6 +322,17 @@ def render_tab_generate(info: dict) -> None:
         rooms_ok = False
 
     st.divider()
+    show_active_pin()
+    subject_names = [s["subject"] for s in st.session_state["exam_subjects"]]
+    mk1, mk2 = st.columns([3, 1])
+    open_marks = mk1.checkbox(
+        "Also open marks entry for the eligible students (creates a PIN for teachers)",
+        disabled=not subject_names,
+        help="Teachers use the PIN in the Data & Marks Management tab to enter marks for any subject.",
+    )
+    marks_max = mk2.number_input("Max marks", min_value=1.0, value=30.0, step=1.0, disabled=not open_marks)
+    if not subject_names:
+        st.caption("Add subjects in step 3 to enable marks entry.")
     if not st.button("Generate Seating Plan", type="primary", use_container_width=True, disabled=not rooms_ok):
         return
 
@@ -424,6 +436,9 @@ def render_tab_generate(info: dict) -> None:
     eligible_for_att = eligible_for_att[
         eligible_for_att["Attendance Percentage"] >= float(attendance_cutoff)
     ].reset_index(drop=True)
+
+    if open_marks:
+        open_marks_session(info["exam_title"], subject_names, eligible_for_att, float(marks_max))
 
     sirt_att_path = export_sirt_attendance_sheets_excel(
         eligible_for_att,

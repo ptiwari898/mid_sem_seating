@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from exam_seating.io_utils import parse_attendance
+from ui.marks_entry import render_teacher_marks_entry
 
 MARKS_PIN_KEY = "MARKS_PIN"
 MAX_PIN_ATTEMPTS = 3
@@ -190,10 +191,13 @@ def render_tab_data_management() -> None:
     # B. Faculty Marks Upload (PIN Protected)
     # -----------------------------------------------------------------
     st.divider()
-    st.subheader("🔐 Faculty Marks Entry")
+    render_teacher_marks_entry()
+
+    st.divider()
+    st.subheader("🔐 Faculty Marks Entry (this session only)")
     st.warning(
         "Marks entered here are kept for this browser session only and are lost on refresh. "
-        "Export the CSV before leaving. For permanent records, use the Teacher Portal."
+        "Export the CSV before leaving. For saved, shared marks use the session PIN entry above."
     )
 
     # PIN entry area

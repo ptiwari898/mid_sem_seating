@@ -1,0 +1,231 @@
+"""Shared SQLite store for marks entry.
+
+A coordinator opens a session from the eligible students of a seating run and gets
+a PIN. Any teacher with the PIN can open the session, pick a subject and enter
+marks. Data lives in a file so every browser session of the app sees the same rows.
+"""
+from __future__ import annotations
+
+import os
+import secrets
+import sqlite3
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+
+DB_PATH = Path(os.environ.get("MARKS_DB_PATH", "marks_sessions.db"))
+SESSION_DAYS = 7
+_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+class MarksError(ValueError):
+    """Raised for bad input; the message is safe to show to the user."""
+
+
+@dataclass(frozen=True)
+class MarksSession:
+    id: int
+    exam_title: str
+    max_marks: float
+
+
+@dataclass(frozen=True)
+class Subject:
+    id: int
+    name: str
+
+
+@contextmanager
+def _connect():
+    """Open the database, commit on success, roll back on error, always close."""
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            pin        TEXT NOT NULL UNIQUE,
+            exam_title TEXT NOT NULL,
+            max_marks  REAL NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS subjects (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            name       TEXT NOT NULL,
+            UNIQUE(session_id, name)
+        );
+        CREATE TABLE IF NOT EXISTS students (
+            session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            roll_no    TEXT NOT NULL,
+            name       TEXT NOT NULL,
+            PRIMARY KEY (session_id, roll_no)
+        );
+        CREATE TABLE IF NOT EXISTS marks (
+            subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+            roll_no    TEXT NOT NULL,
+            marks      REAL,
+            is_absent  INTEGER NOT NULL DEFAULT 0,
+            entered_by TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (subject_id, roll_no)
+        );
+        """
+    )
+    try:
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _now() -> datetime:
+    return datetime.now()
+
+
+def create_session(
+    exam_title: str,
+    subjects: list[str],
+    students: pd.DataFrame,
+    max_marks: float = 30,
+) -> tuple[str, MarksSession]:
+    """Create a session and return its new 6-digit PIN."""
+    subject_names = list(dict.fromkeys(s.strip() for s in subjects if s.strip()))
+    if not subject_names:
+        raise MarksError("Add at least one subject first.")
+    if students.empty:
+        raise MarksError("There are no eligible students.")
+    if max_marks <= 0:
+        raise MarksError("Maximum marks must be above 0.")
+
+    roster = [
+        (str(r["Roll Number"]).strip(), str(r["Name"]).strip())
+        for _, r in students.iterrows()
+    ]
+    with _connect() as conn:
+        pin = _new_pin(conn)
+        cursor = conn.execute(
+            "INSERT INTO sessions (pin, exam_title, max_marks, created_at) VALUES (?, ?, ?, ?)",
+            (pin, exam_title.strip(), float(max_marks), _now().strftime(_TIME_FORMAT)),
+        )
+        session_id = int(cursor.lastrowid)
+        conn.executemany(
+            "INSERT INTO subjects (session_id, name) VALUES (?, ?)",
+            [(session_id, name) for name in subject_names],
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO students (session_id, roll_no, name) VALUES (?, ?, ?)",
+            [(session_id, roll, name) for roll, name in roster],
+        )
+    return pin, MarksSession(session_id, exam_title.strip(), float(max_marks))
+
+
+def _new_pin(conn: sqlite3.Connection) -> str:
+    in_use = {row[0] for row in conn.execute("SELECT pin FROM sessions")}
+    while True:
+        pin = f"{secrets.randbelow(1_000_000):06d}"
+        if pin not in in_use:
+            return pin
+
+
+def find_session(pin: str) -> MarksSession | None:
+    """Return the session for a PIN, or None if unknown or older than SESSION_DAYS."""
+    oldest = (_now() - timedelta(days=SESSION_DAYS)).strftime(_TIME_FORMAT)
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, exam_title, max_marks FROM sessions WHERE pin = ? AND created_at >= ?",
+            (pin.strip(), oldest),
+        ).fetchone()
+    return None if row is None else MarksSession(row[0], row[1], row[2])
+
+
+def list_subjects(session_id: int) -> list[Subject]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM subjects WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()
+    return [Subject(r[0], r[1]) for r in rows]
+
+
+def get_marks_table(session_id: int, subject_id: int) -> pd.DataFrame:
+    """All students of the session with any marks already saved for the subject."""
+    with _connect() as conn:
+        return pd.read_sql_query(
+            """
+            SELECT s.roll_no AS "Roll Number", s.name AS "Name",
+                   m.marks AS "Marks", COALESCE(m.is_absent, 0) AS "Absent"
+            FROM students s
+            LEFT JOIN marks m ON m.roll_no = s.roll_no AND m.subject_id = ?
+            WHERE s.session_id = ?
+            ORDER BY s.roll_no
+            """,
+            conn,
+            params=(subject_id, session_id),
+        ).astype({"Absent": bool})
+
+
+def save_marks(
+    session: MarksSession, subject_id: int, table: pd.DataFrame, entered_by: str
+) -> int:
+    """Save the edited table. Absent students keep no marks. Returns rows saved."""
+    rows = []
+    for _, r in table.iterrows():
+        absent = bool(r["Absent"])
+        value = None if absent or pd.isna(r["Marks"]) else float(r["Marks"])
+        if value is not None and not 0 <= value <= session.max_marks:
+            raise MarksError(
+                f"Marks for {r['Roll Number']} must be between 0 and {session.max_marks:g}."
+            )
+        rows.append(
+            (subject_id, str(r["Roll Number"]), value, int(absent), entered_by.strip(),
+             _now().strftime(_TIME_FORMAT))
+        )
+    with _connect() as conn:
+        # The subject must belong to this session, so a PIN cannot write to another one.
+        owner = conn.execute(
+            "SELECT session_id FROM subjects WHERE id = ?", (subject_id,)
+        ).fetchone()
+        if owner is None or owner[0] != session.id:
+            raise MarksError("Unknown subject for this session.")
+        conn.executemany(
+            """
+            INSERT INTO marks (subject_id, roll_no, marks, is_absent, entered_by, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(subject_id, roll_no) DO UPDATE SET
+                marks = excluded.marks, is_absent = excluded.is_absent,
+                entered_by = excluded.entered_by, updated_at = excluded.updated_at
+            """,
+            rows,
+        )
+    return len(rows)
+
+
+def export_marks(session_id: int) -> pd.DataFrame:
+    """One row per student, one column per subject ("AB" for absent, blank if not entered)."""
+    with _connect() as conn:
+        students = pd.read_sql_query(
+            'SELECT roll_no AS "Roll Number", name AS "Name" FROM students '
+            "WHERE session_id = ? ORDER BY roll_no",
+            conn, params=(session_id,),
+        )
+        marks = pd.read_sql_query(
+            """
+            SELECT s.name AS subject, m.roll_no, m.marks, m.is_absent
+            FROM marks m JOIN subjects s ON s.id = m.subject_id
+            WHERE s.session_id = ?
+            """,
+            conn, params=(session_id,),
+        )
+        subject_names = [s.name for s in list_subjects(session_id)]
+    for name in subject_names:
+        students[name] = ""
+    for _, r in marks.iterrows():
+        cell = "AB" if r["is_absent"] else ("" if pd.isna(r["marks"]) else f"{r['marks']:g}")
+        students.loc[students["Roll Number"] == r["roll_no"], r["subject"]] = cell
+    return students
