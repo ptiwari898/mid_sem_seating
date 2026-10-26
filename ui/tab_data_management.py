@@ -133,7 +133,7 @@ def render_tab_data_management() -> None:
     # B. Marks entry by session PIN
     # -----------------------------------------------------------------
     st.divider()
-    st.caption("Teachers enter marks on the separate **Marks Entry** page (use the sidebar or the /marks-entry link).")
+    st.caption("Teachers enter marks on the separate **Marks Entry** page (share the /marks-entry link).")
     render_coordinator_panel()
 
     # -----------------------------------------------------------------

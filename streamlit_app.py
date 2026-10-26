@@ -19,6 +19,7 @@ from ui.tab_result_analysis import render_tab_result_analysis
 
 def coordinator_page() -> None:
     info = sidebar_institute_info()
+    st.sidebar.page_link(MARKS_PAGE, label="Marks Entry page (for teachers)", icon="📝")
     st.caption(f"• {info['institute']}  •  {info['department']}")
 
     tab1, tab2, tab3 = st.tabs([
@@ -40,6 +41,12 @@ def marks_entry_page() -> None:
     render_teacher_marks_entry()
 
 
+# The sidebar navigation is hidden so the teachers' page shows no link to the coordinator
+# page. The coordinator reaches Marks Entry through the link above.
+COORDINATOR_PAGE = st.Page(coordinator_page, title="Seating & Results", icon="🪑", default=True)
+MARKS_PAGE = st.Page(marks_entry_page, title="Marks Entry", icon="📝", url_path="marks-entry")
+
+
 def main() -> None:
     cleanup_old_web_runs()
 
@@ -49,13 +56,7 @@ def main() -> None:
         layout="wide",
     )
 
-    navigation = st.navigation(
-        [
-            st.Page(coordinator_page, title="Seating & Results", icon="🪑", default=True),
-            st.Page(marks_entry_page, title="Marks Entry", icon="📝", url_path="marks-entry"),
-        ]
-    )
-    navigation.run()
+    st.navigation([COORDINATOR_PAGE, MARKS_PAGE], position="hidden").run()
 
 
 if __name__ == "__main__":

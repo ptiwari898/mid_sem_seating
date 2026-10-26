@@ -35,7 +35,7 @@ A complete Python-based system to automate exam seating arrangement using studen
 ## Marks Entry
 
 Tick "Also open marks entry" when generating a plan to get a 6-digit PIN. Teachers open the separate
-**Marks Entry** page (`/marks-entry`, also in the sidebar), enter the PIN, pick any subject (and section)
+**Marks Entry** page (`/marks-entry`; the coordinator page links to it, the page itself has no link back to the seating page), enter the PIN, pick any subject (and section)
 and enter marks for the eligible students.
 The coordinator can recover the PIN, lock the marks, download marks and edit history, and back up the
 database. See [sample_data/HOW_TO_PROVIDE_DATA.md](sample_data/HOW_TO_PROVIDE_DATA.md).

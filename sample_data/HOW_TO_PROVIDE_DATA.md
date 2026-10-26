@@ -21,7 +21,7 @@ All three are read as 82. See `students.csv` for an example.
 
 ## 3. Teachers enter marks
 
-1. Open the **Marks Entry** page (sidebar, or add `/marks-entry` to the app address) and enter the PIN.
+1. Open the **Marks Entry** page (add `/marks-entry` to the app address) and enter the PIN.
 2. Choose any subject (all subjects are listed), optionally a section, and type your name.
 3. Fill in marks (or tick **Absent**) and press **Save Marks**. Only changed rows are saved.
 
