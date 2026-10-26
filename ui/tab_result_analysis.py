@@ -144,6 +144,15 @@ def render_tab_result_analysis() -> None:
         use_container_width=True,
     )
 
+    # ── Header Information ─────────────────────────────────────────────────────
+    st.subheader("Header Information")
+    hi1, hi2 = st.columns(2)
+    institute  = hi1.text_input("Institute Name", value="SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY", key="ra_institute")
+    department = hi2.text_input("Department",     value="DEPARTMENT OF CSIT",                        key="ra_department")
+    hi3, hi4 = st.columns(2)
+    exam_title = hi3.text_input("Exam Title",  value="I MID SEM EXAMINATION (JAN-JUN 2026)", key="ra_exam_title")
+    section    = hi4.text_input("Section",     placeholder="CSIT- 6th Sem - CSIT--A",        key="ra_section")
+
     # ── Data Source Selection ─────────────────────────────────────────────────
     st.subheader("Data Source")
     use_saved_data = st.checkbox(
