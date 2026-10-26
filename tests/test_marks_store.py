@@ -195,3 +195,15 @@ def test_every_change_is_kept_in_the_history(opened):
     assert history["New Marks"].tolist() == [10.0, 14.0]
     assert history["Old Marks"][1] == 10.0
     assert history["Entered By"].tolist() == ["Prof A", "Prof B"]
+
+
+def test_wrong_pins_from_any_browser_are_limited_globally(opened, monkeypatch):
+    pin, session = opened
+    for guess in range(marks_store.MAX_FAILED_PINS):
+        assert marks_store.find_session(f"x{guess}") is None
+    with pytest.raises(marks_store.MarksError, match="Too many wrong PINs"):
+        marks_store.find_session(pin)  # even the right PIN waits
+
+    later = datetime.now() + timedelta(minutes=marks_store.FAILED_PIN_WINDOW_MINUTES + 1)
+    monkeypatch.setattr(marks_store, "_now", lambda: later)
+    assert marks_store.find_session(pin) == session

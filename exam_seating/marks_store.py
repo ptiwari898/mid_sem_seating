@@ -18,6 +18,9 @@ import pandas as pd
 
 DB_PATH = Path(os.environ.get("MARKS_DB_PATH", "marks_sessions.db"))
 SESSION_DAYS = 7
+# Wrong PINs allowed per window across ALL browsers, so new sessions cannot reset the count.
+MAX_FAILED_PINS = 30
+FAILED_PIN_WINDOW_MINUTES = 15
 _TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -79,6 +82,7 @@ def _connect():
             branch     TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (session_id, roll_no)
         );
+        CREATE TABLE IF NOT EXISTS failed_pins (at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS marks_log (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -175,13 +179,26 @@ def _new_pin(conn: sqlite3.Connection) -> str:
 
 
 def find_session(pin: str) -> MarksSession | None:
-    """Return the session for a PIN, or None if unknown or older than SESSION_DAYS."""
-    oldest = (_now() - timedelta(days=SESSION_DAYS)).strftime(_TIME_FORMAT)
+    """Return the session for a PIN, or None if unknown or older than SESSION_DAYS.
+
+    Raises MarksError once too many wrong PINs were tried recently, from any browser.
+    """
+    now = _now()
+    oldest = (now - timedelta(days=SESSION_DAYS)).strftime(_TIME_FORMAT)
+    window = (now - timedelta(minutes=FAILED_PIN_WINDOW_MINUTES)).strftime(_TIME_FORMAT)
     with _connect() as conn:
+        conn.execute("DELETE FROM failed_pins WHERE at < ?", (window,))
+        failures = conn.execute("SELECT COUNT(*) FROM failed_pins").fetchone()[0]
+        if failures >= MAX_FAILED_PINS:
+            raise MarksError(
+                f"Too many wrong PINs were tried. Wait {FAILED_PIN_WINDOW_MINUTES} minutes and retry."
+            )
         row = conn.execute(
             "SELECT id, exam_title, max_marks FROM sessions WHERE pin = ? AND created_at >= ?",
             (pin.strip(), oldest),
         ).fetchone()
+        if row is None:
+            conn.execute("INSERT INTO failed_pins (at) VALUES (?)", (now.strftime(_TIME_FORMAT),))
     return None if row is None else MarksSession(row[0], row[1], row[2])
 
 

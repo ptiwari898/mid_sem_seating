@@ -82,7 +82,11 @@ def render_teacher_marks_entry() -> None:
             if wait:
                 st.error(f"Too many wrong PINs. Try again in {wait // 60 + 1} min.")
                 return
-            found = marks_store.find_session(pin) if pin.strip() else None
+            try:
+                found = marks_store.find_session(pin) if pin.strip() else None
+            except marks_store.MarksError as exc:
+                st.error(str(exc))
+                return
             if found is None:
                 st.session_state["tm_failed"] = st.session_state.get("tm_failed", 0) + 1
                 st.session_state["tm_last_failure"] = time.time()
