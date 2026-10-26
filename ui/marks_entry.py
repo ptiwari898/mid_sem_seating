@@ -51,19 +51,20 @@ def show_active_pin(slot=None) -> None:
 
 def open_marks_session(
     exam_title: str, subjects: list[str], eligible: pd.DataFrame, max_marks: float, slot=None
-) -> None:
-    """Create the session from the eligible students and show its PIN."""
+) -> int | None:
+    """Create the session from the eligible students and show its PIN. Returns its id."""
     try:
         pin, session = marks_store.create_session(
             exam_title, subjects, eligible, max_marks
         )
     except marks_store.MarksError as exc:
         st.error(str(exc))
-        return
+        return None
     st.session_state["marks_session_info"] = {
         "pin": pin, "exam_title": session.exam_title, "session_id": session.id,
     }
     show_active_pin(slot)
+    return session.id
 
 
 def render_teacher_marks_entry() -> None:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
+from exam_seating import marks_store
 from exam_seating.io_utils import DataValidationError, parse_attendance
 from exam_seating.service import SeatingConfig, run_seating_system
 from exam_seating.sirt_exporters import (
@@ -21,6 +23,26 @@ from ui.runtime import (
     load_students_from_upload,
 )
 from ui.templates import XLSX_MIME, make_students_template
+
+
+def _remember_plan(info, cutoff, summary, room_allocations, archive, marks_session_id) -> None:
+    """Keep the plan so the admin page can list and re-download it later."""
+    rooms = []
+    for room_no, room_df in room_allocations.items():
+        rolls = room_df["Roll Number"].astype(str).tolist() if not room_df.empty else []
+        rooms.append(
+            {"Room": str(room_no), "Students": len(rolls),
+             "From": rolls[0] if rolls else "", "To": rolls[-1] if rolls else ""}
+        )
+    try:
+        marks_store.save_plan(
+            exam_title=info["exam_title"], department=info["department"], semester=info["semester"],
+            cutoff=cutoff, total=summary.total_students, eligible=summary.eligible_students,
+            debarred=summary.not_eligible_students, allocated=summary.allocated_students,
+            rooms=rooms, archive=archive, session_id=marks_session_id,
+        )
+    except (OSError, sqlite3.Error) as exc:
+        st.warning(f"The plan was generated but could not be saved for the admin page: {exc}")
 
 
 def render_tab_generate(info: dict) -> None:
@@ -439,8 +461,11 @@ def render_tab_generate(info: dict) -> None:
         eligible_for_att["Attendance Percentage"] >= float(attendance_cutoff)
     ].reset_index(drop=True)
 
+    marks_session_id = None
     if open_marks:
-        open_marks_session(info["exam_title"], subject_names, eligible_for_att, float(marks_max), pin_slot)
+        marks_session_id = open_marks_session(
+            info["exam_title"], subject_names, eligible_for_att, float(marks_max), pin_slot
+        )
 
     sirt_att_path = export_sirt_attendance_sheets_excel(
         eligible_for_att,
@@ -479,6 +504,10 @@ def render_tab_generate(info: dict) -> None:
     combined_bytes = bundle_reports_zip(
         [sirt_seating_path, sirt_debarred_path, sirt_att_path],
         ["SIRT_Main_Seating.xlsx", "SIRT_Debarred_List.xlsx", "SIRT_Attendance_Sheets.xlsx"],
+    )
+    _remember_plan(
+        info, float(attendance_cutoff), result.summary, room_allocations_enriched,
+        combined_bytes, marks_session_id,
     )
     st.download_button(
         "Download All Reports (.zip)",

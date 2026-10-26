@@ -25,3 +25,26 @@ def test_room_names_are_stripped_so_padded_duplicates_are_caught():
 
     _add_room(app, "   ")
     assert len(app.session_state["rooms_with_info"]) == 1
+
+
+def test_generated_plan_is_remembered_for_the_admin_page(tmp_path, monkeypatch):
+    import pandas as pd
+
+    from exam_seating import marks_store
+    from exam_seating.models import SeatingSummary
+    from ui.tab_generate import _remember_plan
+
+    monkeypatch.setattr(marks_store, "DB_PATH", tmp_path / "plans.db")
+    rooms = {
+        "F-307": pd.DataFrame({"Roll Number": ["001", "002", "003"]}),
+        "F-308": pd.DataFrame({"Roll Number": []}),
+    }
+    _remember_plan(INFO, 40.0, SeatingSummary(5, 3, 2, 3, 0, 2, 40, 40), rooms, b"zipbytes", None)
+
+    (plan,) = marks_store.list_plans()
+    assert (plan.total, plan.eligible, plan.debarred, plan.allocated) == (5, 3, 2, 3)
+    assert plan.rooms == [
+        {"Room": "F-307", "Students": 3, "From": "001", "To": "003"},
+        {"Room": "F-308", "Students": 0, "From": "", "To": ""},
+    ]
+    assert marks_store.get_plan_archive(plan.id) == b"zipbytes"
