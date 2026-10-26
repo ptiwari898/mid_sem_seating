@@ -4,11 +4,16 @@ import streamlit as st
 
 
 def sidebar_institute_info() -> dict:
-    st.sidebar.header("Institute Info")
-    institute = st.sidebar.text_input("Institute Name", "SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY")
-    department = st.sidebar.text_input("Department", "DEPARTMENT OF CSIT")
-    exam_title = st.sidebar.text_input("Exam Title", "I MID SEM EXAMINATION (JAN-JUN 2026)")
-    semester = st.sidebar.text_input("Semester", "6th Sem")
+    """Show the institute as the sidebar title; the editable fields stay folded away."""
+    brand = st.sidebar.empty()
+
+    with st.sidebar.expander("Institute details"):
+        institute = st.text_input("Institute name", "SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY")
+        department = st.text_input("Department", "DEPARTMENT OF CSIT")
+        exam_title = st.text_input("Exam title", "I MID SEM EXAMINATION (JAN-JUN 2026)")
+        semester = st.text_input("Semester", "6th Sem")
+
+    brand.markdown(f"**{institute}**  \n{department}")
 
     return {
         "institute": institute,

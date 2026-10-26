@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
 from exam_seating import marks_store
+
+APP = Path(__file__).resolve().parent.parent / "streamlit_app.py"
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +92,7 @@ def test_marks_entry_is_its_own_page_and_not_a_tab_of_the_coordinator_page():
     assert not page.exception
     assert page.selectbox[0].options == ["Maths", "Physics"]
 
-    home = AppTest.from_file("streamlit_app.py", default_timeout=60).run()
+    home = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not home.exception
     assert [t.label for t in home.tabs] == ["Seating Plan", "Result Analysis", "Saved Students"]
     assert not any(t.label == "Session PIN" for t in home.text_input)  # PIN box lives on its page
@@ -100,5 +104,5 @@ def test_only_the_coordinator_page_links_to_marks_entry_and_not_back():
     ).run()
     assert not marks.sidebar.get("page_link")  # no way back to the seating page
 
-    home = AppTest.from_file("streamlit_app.py", default_timeout=60).run()
+    home = AppTest.from_file(str(APP), default_timeout=60).run()
     assert [link.proto.page for link in home.sidebar.get("page_link")] == ["marks-entry", "admin"]

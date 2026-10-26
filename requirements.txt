@@ -1,4 +1,4 @@
 -r requirements-prod.txt
-streamlit==1.44.*
+streamlit==1.65.*
 pytest>=8
 httpx>=0.27

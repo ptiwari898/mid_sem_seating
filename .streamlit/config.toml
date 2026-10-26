@@ -1,0 +1,17 @@
+# One accent colour per mode; neutrals follow the user's light/dark setting.
+# Shape rule: controls use the base radius (8px); cards and forms use 12px (see ui/style.py).
+[theme]
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
+showWidgetBorder = true
+headingFontSizes = ["1.7rem", "1.3rem", "1.1rem"]
+headingFontWeights = [650, 620, 620]
+
+[theme.light]
+primaryColor = "#2F5FD0"
+
+[theme.dark]
+primaryColor = "#4F7DEA"
+
+[client]
+toolbarMode = "minimal"

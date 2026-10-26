@@ -13,6 +13,7 @@ import streamlit as st
 from ui.admin_page import render_admin_page
 from ui.marks_entry import render_teacher_marks_entry
 from ui.runtime import cleanup_old_web_runs
+from ui.style import apply_theme, narrow_page
 from ui.sidebar import sidebar_institute_info
 from ui.tab_data_management import render_tab_data_management
 from ui.tab_generate import render_tab_generate
@@ -21,9 +22,10 @@ from ui.tab_result_analysis import render_tab_result_analysis
 
 def coordinator_page() -> None:
     info = sidebar_institute_info()
-    st.sidebar.page_link(MARKS_PAGE, label="Marks Entry page (for teachers)", icon="📝")
-    st.sidebar.page_link(ADMIN_PAGE, label="Admin page (plans and marks)", icon="🗂️")
-    st.caption(f"• {info['institute']}  •  {info['department']}")
+    st.sidebar.divider()
+    st.sidebar.caption("Other pages")
+    st.sidebar.page_link(MARKS_PAGE, label="Marks Entry (for teachers)", icon=":material/edit_note:")
+    st.sidebar.page_link(ADMIN_PAGE, label="Admin", icon=":material/admin_panel_settings:")
 
     tab1, tab2, tab3 = st.tabs([
         "Seating Plan",
@@ -40,6 +42,7 @@ def coordinator_page() -> None:
 
 
 def marks_entry_page() -> None:
+    narrow_page()
     st.header("Marks Entry")
     render_teacher_marks_entry()
 
@@ -50,9 +53,9 @@ def admin_page() -> None:
 
 # The sidebar navigation is hidden so the teachers' page shows no link to the coordinator
 # page. The coordinator reaches Marks Entry through the link above.
-COORDINATOR_PAGE = st.Page(coordinator_page, title="Seating & Results", icon="🪑", default=True)
-MARKS_PAGE = st.Page(marks_entry_page, title="Marks Entry", icon="📝", url_path="marks-entry")
-ADMIN_PAGE = st.Page(admin_page, title="Admin", icon="🗂️", url_path="admin")
+COORDINATOR_PAGE = st.Page(coordinator_page, title="Seating & Results", icon=":material/event_seat:", default=True)
+MARKS_PAGE = st.Page(marks_entry_page, title="Marks Entry", icon=":material/edit_note:", url_path="marks-entry")
+ADMIN_PAGE = st.Page(admin_page, title="Admin", icon=":material/admin_panel_settings:", url_path="admin")
 
 
 def main() -> None:
@@ -60,10 +63,11 @@ def main() -> None:
 
     st.set_page_config(
         page_title="SIRT Exam Seating System",
-        page_icon="🪑",
+        page_icon=":material/event_seat:",
         layout="wide",
     )
 
+    apply_theme()
     st.navigation([COORDINATOR_PAGE, MARKS_PAGE, ADMIN_PAGE], position="hidden").run()
 
 
