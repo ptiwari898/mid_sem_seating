@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from exam_seating import marks_store
+from exam_seating.exporters import SAFE_XLSX
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CSV_MIME  = "text/csv"
@@ -68,7 +69,7 @@ def _build_section_excel(
     pass_threshold: float,
 ) -> bytes:
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(buf, **SAFE_XLSX) as writer:
         wb = writer.book
         ws = wb.add_worksheet("Result")
 
@@ -129,7 +130,7 @@ def _build_section_excel(
 
 def _build_summary_excel(summary_df: pd.DataFrame) -> bytes:
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(buf, **SAFE_XLSX) as writer:
         summary_df.to_excel(writer, sheet_name="Summary", index=False)
     return buf.getvalue()
 

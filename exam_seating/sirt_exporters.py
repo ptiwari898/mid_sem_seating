@@ -14,6 +14,8 @@ from typing import Dict
 
 import pandas as pd
 
+from .exporters import SAFE_XLSX, unique_sheet_name
+
 
 def _write_sirt_header(
     ws,
@@ -49,6 +51,16 @@ def _write_sirt_header(
         row += 1
 
     return row
+
+
+def _fill_group_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Give students with a blank Branch/Section a group, since groupby drops blanks."""
+    df = df.copy()
+    for column in ("Branch", "Section"):
+        if column in df.columns:
+            text = df[column].fillna("").astype(str).str.strip()
+            df[column] = text.mask(text.isin(["", "nan"]), "Unassigned")
+    return df
 
 
 def _header_fmt(workbook):
@@ -96,6 +108,7 @@ def export_sirt_main_seating_excel(
         if room_df.empty:
             continue
         # Group by Section if available, else treat as one group
+        room_df = _fill_group_columns(room_df)
         if "Section" in room_df.columns:
             groups = room_df.groupby("Section", sort=True)
         else:
@@ -121,7 +134,7 @@ def export_sirt_main_seating_excel(
     col_headers = ["S. No.", "BRANCH", "Section", "Roll Number", "No. of Students Appeared", "Class Room"]
     num_cols = len(col_headers)
 
-    with pd.ExcelWriter(target, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(target, **SAFE_XLSX) as writer:
         # Write a dummy df so the sheet is created
         pd.DataFrame().to_excel(writer, sheet_name="Main Seating", index=False)
         wb = writer.book
@@ -132,7 +145,7 @@ def export_sirt_main_seating_excel(
             institute=institute,
             department=department,
             exam_title=exam_title,
-            sub_title=f"{department.split()[2] if len(department.split()) > 2 else default_branch} {semester}",
+            sub_title=f"{department.split(' OF ', 1)[-1].strip() or default_branch} {semester}",
         )
 
         hf = _header_fmt(wb)
@@ -174,6 +187,7 @@ def export_sirt_debarred_excel(
     target = output_dir / "SIRT_Debarred_List.xlsx"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    not_eligible = _fill_group_columns(not_eligible)
     not_eligible = not_eligible.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
 
     has_section = "Section" in not_eligible.columns
@@ -198,13 +212,11 @@ def export_sirt_debarred_excel(
     col_widths  = [8, 20, 35, 16]
     num_cols    = len(col_headers)
 
-    def _safe(name: str) -> str:
-        cleaned = "".join(ch for ch in name if ch not in r'\/*?:[]}')
-        return (cleaned or "Sheet")[:31]
+    used_names: set[str] = set()
 
-    with pd.ExcelWriter(target, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(target, **SAFE_XLSX) as writer:
         for sheet_key, subtitle, grp_df in groups:
-            sheet_name = _safe(sheet_key)
+            sheet_name = unique_sheet_name(sheet_key, used_names)
             pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
             wb = writer.book
             ws = writer.sheets[sheet_name]
@@ -260,6 +272,7 @@ def export_sirt_attendance_sheets_excel(
     if subjects is None:
         subjects = []
 
+    students_df = _fill_group_columns(students_df)
     students_df = students_df.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
 
     has_section = "Section" in students_df.columns
@@ -284,13 +297,11 @@ def export_sirt_attendance_sheets_excel(
     num_subj  = len(subjects)
     total_cols = num_fixed + max(num_subj, 1)
 
-    def _safe(name: str) -> str:
-        cleaned = "".join(ch for ch in name if ch not in r'\/*?:[]}')
-        return (cleaned or "Sheet")[:31]
+    used_names: set[str] = set()
 
-    with pd.ExcelWriter(target, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(target, **SAFE_XLSX) as writer:
         for sheet_key, subtitle, grp_df in groups:
-            sheet_name = _safe(sheet_key)
+            sheet_name = unique_sheet_name(sheet_key, used_names)
             pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
             wb = writer.book
             ws = writer.sheets[sheet_name]

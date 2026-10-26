@@ -2,15 +2,36 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Iterable
+from xml.sax.saxutils import escape
 
 import pandas as pd
 
 from .models import SeatingSummary
 
 
+# Names and roll numbers come from uploaded files, so never let Excel treat them
+# as formulas ("=1+1") or links ("http://...").
+SAFE_XLSX = {
+    "engine": "xlsxwriter",
+    "engine_kwargs": {"options": {"strings_to_formulas": False, "strings_to_urls": False}},
+}
+
+
 def _safe_sheet_name(name: str) -> str:
     cleaned = "".join(ch for ch in name if ch not in ["\\", "/", "*", "?", ":", "[", "]"])
     return (cleaned or "Sheet")[:31]
+
+
+def unique_sheet_name(name: str, used: set[str]) -> str:
+    """A valid Excel sheet name not yet in `used` (Excel ignores case). Records the choice."""
+    base = _safe_sheet_name(name)
+    candidate, n = base, 2
+    while candidate.lower() in used:
+        suffix = f"_{n}"
+        candidate = base[: 31 - len(suffix)] + suffix
+        n += 1
+    used.add(candidate.lower())
+    return candidate
 
 
 def export_roomwise_text(room_allocations: Dict[str, pd.DataFrame], output_dir: Path) -> Path:
@@ -101,7 +122,7 @@ def export_excel(
 ) -> Path:
     target = output_dir / "exam_seating_output.xlsx"
 
-    with pd.ExcelWriter(target, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(target, **SAFE_XLSX) as writer:
         wb = writer.book
         
         # Define formats without formulas
@@ -123,8 +144,9 @@ def export_excel(
             "valign": "vcenter"
         })
         
+        used_names: set[str] = {"not_eligible", "summary"}
         for room_no, room_df in room_allocations.items():
-            sheet_name = _safe_sheet_name(f"Room_{room_no}")
+            sheet_name = unique_sheet_name(f"Room_{room_no}", used_names)
             ws = wb.add_worksheet(sheet_name)
             
             # Write headers
@@ -141,7 +163,7 @@ def export_excel(
                     ws.write(row_idx, col_idx, value, data_fmt)
 
             # Create attendance sheet
-            attendance_sheet_name = _safe_sheet_name(f"Att_{room_no}")
+            attendance_sheet_name = unique_sheet_name(f"Att_{room_no}", used_names)
             att_ws = wb.add_worksheet(attendance_sheet_name)
             
             # Write headers for attendance sheet
@@ -207,7 +229,7 @@ def export_pdf(room_allocations: Dict[str, pd.DataFrame], output_dir: Path) -> P
     story: list[object] = []
 
     for room_no, room_df in room_allocations.items():
-        story.append(Paragraph(f"Room {room_no}", styles["Heading3"]))
+        story.append(Paragraph(f"Room {escape(str(room_no))}", styles["Heading3"]))
         data = [["Seat", "Roll Number", "Name", "Attendance %"]]
 
         if room_df.empty:
