@@ -102,6 +102,14 @@ sample_data/        Example input files
 docs/               Extra documentation
 ```
 
+## API Deployment Notes
+
+- The FastAPI app in `api/index.py` is deployed on Vercel using `requirements-prod.txt`.
+- Set the `API_KEY` environment variable to require an `X-API-Key` header on the three
+  `generate-seating` endpoints. Without it the API is open. `/health` is always open.
+- Uploads are limited to 5 MB per file. Vercel functions are stateless, so there is no
+  built-in rate limit; put one in front (for example Vercel Firewall) if the URL is public.
+
 ## Output Files
 
 Generated in output folder:

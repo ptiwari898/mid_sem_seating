@@ -45,3 +45,24 @@ def test_api_returns_400_for_cutoff_outside_0_to_100(cutoff):
 
 def test_unsafe_download_route_is_gone():
     assert TestClient(app).get("/api/download/a.txt", params={"content_base64": "aGk="}).status_code == 404
+
+
+def _upload_files():
+    return {
+        "students_file": ("s.csv", "Roll Number,Name,Attendance Percentage\n1,A,90"),
+        "rooms_file": ("r.csv", "Room Number,Capacity\nR1,5"),
+    }
+
+
+def test_api_requires_the_key_only_when_one_is_configured(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.delenv("API_KEY", raising=False)
+    assert client.post("/api/generate-seating", files=_upload_files()).status_code == 200
+
+    monkeypatch.setenv("API_KEY", "s3cret")
+    assert client.post("/api/generate-seating", files=_upload_files()).status_code == 401
+    bad = client.post("/api/generate-seating", files=_upload_files(), headers={"X-API-Key": "nope"})
+    assert bad.status_code == 401
+    good = client.post("/api/generate-seating", files=_upload_files(), headers={"X-API-Key": "s3cret"})
+    assert good.status_code == 200
+    assert client.get("/health").status_code == 200  # health stays open for monitors

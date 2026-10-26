@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import hmac
+import os
 import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -25,6 +27,13 @@ from exam_seating.models import SeatingSummary
 app = FastAPI(title="SIRT Seating API")
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def require_api_key(x_api_key: str = Header(default="")) -> None:
+    """If the API_KEY environment variable is set, callers must send it as X-API-Key."""
+    expected = os.environ.get("API_KEY")
+    if expected and not hmac.compare_digest(x_api_key.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Missing or invalid API key.")
 
 
 @app.exception_handler(ValidationError)
@@ -174,7 +183,7 @@ def _process_seating(
     )
 
 
-@app.post("/api/generate-seating", response_model=SeatingResponse)
+@app.post("/api/generate-seating", response_model=SeatingResponse, dependencies=[Depends(require_api_key)])
 async def generate_seating(
     students_file: UploadFile = File(...),
     rooms_file: UploadFile = File(...),
@@ -207,7 +216,7 @@ async def generate_seating(
                 path.unlink(missing_ok=True)
 
 
-@app.post("/api/generate-seating-json", response_model=SeatingResponse)
+@app.post("/api/generate-seating-json", response_model=SeatingResponse, dependencies=[Depends(require_api_key)])
 async def generate_seating_json(
     students_file_base64: str,
     rooms_file_base64: str,
@@ -245,7 +254,7 @@ async def generate_seating_json(
                 path.unlink(missing_ok=True)
 
 
-@app.post("/api/generate-seating-multipart", response_model=SeatingResponse)
+@app.post("/api/generate-seating-multipart", response_model=SeatingResponse, dependencies=[Depends(require_api_key)])
 async def generate_seating_multipart(
     students_file: UploadFile = File(...),
     rooms_file: UploadFile = File(...),
