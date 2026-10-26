@@ -60,3 +60,17 @@ def test_api_returns_413_for_oversized_upload():
         },
     )
     assert response.status_code == 413
+
+
+@pytest.mark.parametrize("cutoff", ["150", "-1"])
+def test_api_returns_400_for_cutoff_outside_0_to_100(cutoff):
+    response = TestClient(app).post(
+        "/api/generate-seating",
+        files={
+            "students_file": ("s.csv", "Roll Number,Name,Attendance Percentage\n1,A,90"),
+            "rooms_file": ("r.csv", "Room Number,Capacity\nR1,5"),
+        },
+        data={"attendance_cutoff": cutoff},
+    )
+    assert response.status_code == 400
+    assert "attendance_cutoff" in response.json()["detail"]

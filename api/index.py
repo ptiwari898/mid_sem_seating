@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from exam_seating.allocator import allocate_students_to_rooms, split_eligibility
 from exam_seating.exporters import (
@@ -26,6 +26,13 @@ from exam_seating.models import SeatingSummary
 app = FastAPI(title="SIRT Seating API")
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+@app.exception_handler(ValidationError)
+async def _config_error_handler(_request, exc: ValidationError):
+    first = exc.errors()[0]
+    field = ".".join(str(part) for part in first["loc"])
+    return JSONResponse(status_code=400, content={"detail": f"Invalid {field}: {first['msg']}"})
 
 
 @app.exception_handler(DataValidationError)
