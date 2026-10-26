@@ -28,6 +28,13 @@ from exam_seating.models import SeatingSummary
 
 app = FastAPI(title="SIRT Seating API")
 
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+@app.exception_handler(DataValidationError)
+async def _validation_error_handler(_request, exc: DataValidationError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
 
 class SeatingConfig(BaseModel):
     attendance_cutoff: float = Field(default=40.0, ge=0, le=100)
@@ -73,12 +80,14 @@ async def health():
 
 
 def _read_file_content(file: UploadFile) -> bytes:
-    content = file.file.read()
+    content = file.file.read(MAX_UPLOAD_BYTES + 1)
     file.file.seek(0)
     return content
 
 
 def _save_uploaded_file(content: bytes, filename: str) -> Path:
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 5 MB).")
     suffix = Path(filename).suffix or ".csv"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
         f.write(content)
@@ -175,9 +184,6 @@ async def generate_seating(
     students_content = _read_file_content(students_file)
     rooms_content = _read_file_content(rooms_file)
 
-    students_path = _save_uploaded_file(students_content, students_file.filename or "students.csv")
-    rooms_path = _save_uploaded_file(rooms_content, rooms_file.filename or "rooms.csv")
-
     config = SeatingConfig(
         attendance_cutoff=attendance_cutoff,
         shuffle_students=shuffle_students,
@@ -186,15 +192,16 @@ async def generate_seating(
         export_pdf_file=export_pdf_file,
     )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output_dir = Path(tmpdir) / "output"
-        try:
-            result = _process_seating(students_path, rooms_path, config, output_dir)
-        finally:
-            students_path.unlink(missing_ok=True)
-            rooms_path.unlink(missing_ok=True)
-
-    return result
+    students_path = rooms_path = None
+    try:
+        students_path = _save_uploaded_file(students_content, students_file.filename or "students.csv")
+        rooms_path = _save_uploaded_file(rooms_content, rooms_file.filename or "rooms.csv")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            return _process_seating(students_path, rooms_path, config, Path(tmpdir) / "output")
+    finally:
+        for path in (students_path, rooms_path):
+            if path is not None:
+                path.unlink(missing_ok=True)
 
 
 @app.post("/api/generate-seating-json", response_model=SeatingResponse)
@@ -215,9 +222,6 @@ async def generate_seating_json(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 encoding: {e}")
 
-    students_path = _save_uploaded_file(students_content, students_filename)
-    rooms_path = _save_uploaded_file(rooms_content, rooms_filename)
-
     config = SeatingConfig(
         attendance_cutoff=attendance_cutoff,
         shuffle_students=shuffle_students,
@@ -226,15 +230,16 @@ async def generate_seating_json(
         export_pdf_file=export_pdf_file,
     )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output_dir = Path(tmpdir) / "output"
-        try:
-            result = _process_seating(students_path, rooms_path, config, output_dir)
-        finally:
-            students_path.unlink(missing_ok=True)
-            rooms_path.unlink(missing_ok=True)
-
-    return result
+    students_path = rooms_path = None
+    try:
+        students_path = _save_uploaded_file(students_content, students_filename)
+        rooms_path = _save_uploaded_file(rooms_content, rooms_filename)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            return _process_seating(students_path, rooms_path, config, Path(tmpdir) / "output")
+    finally:
+        for path in (students_path, rooms_path):
+            if path is not None:
+                path.unlink(missing_ok=True)
 
 
 @app.post("/api/generate-seating-multipart", response_model=SeatingResponse)

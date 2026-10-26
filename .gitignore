@@ -46,3 +46,9 @@ web_runs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Secrets and local databases (hold PINs, teacher hashes, student marks)
+.streamlit/secrets.toml
+*.db
+*.sqlite
+*.sqlite3

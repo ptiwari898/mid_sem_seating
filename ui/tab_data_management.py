@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+import hmac
 import time
 from datetime import datetime
 
@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 
 MARKS_PIN_KEY = "MARKS_PIN"
+MAX_PIN_ATTEMPTS = 3
+LOCKOUT_SECONDS = 900
 
 
 # ── Initialisation ────────────────────────────────────────────────
@@ -57,27 +59,27 @@ def _validate_pin(pin: str) -> bool:
         st.error("⚠️ PIN configuration missing. Ask admin to set MARKS_PIN in .streamlit/secrets.toml.")
         return False
 
+    # Lock out first, so a locked session never even checks the PIN.
+    if st.session_state["pin_attempts"] >= MAX_PIN_ATTEMPTS:
+        if time.time() - st.session_state["pin_time"] <= LOCKOUT_SECONDS:
+            st.error("🔒 Too many failed attempts. PIN locked for 15 minutes.")
+            return False
+        st.session_state["pin_attempts"] = 0
+
     correct_pin = str(st.secrets[MARKS_PIN_KEY])
-    if pin == correct_pin:
+    if hmac.compare_digest(pin.encode("utf-8"), correct_pin.encode("utf-8")):
         st.session_state["marks_authenticated"] = True
         st.session_state["pin_attempts"] = 0
-        st.session_state["pin_time"] = time.time()
         return True
+
+    st.session_state["pin_attempts"] += 1
+    st.session_state["pin_time"] = time.time()
+    remaining = MAX_PIN_ATTEMPTS - st.session_state["pin_attempts"]
+    if remaining <= 0:
+        st.error("🔒 Too many failed attempts. PIN locked for 15 minutes.")
     else:
-        st.session_state["pin_attempts"] += 1
-        remaining = max(0, 3 - st.session_state["pin_attempts"])
-        if st.session_state["pin_attempts"] >= 3 and pin != correct_pin:
-            st.error(
-                "🔒 Too many failed attempts. PIN locked for 15 minutes. "
-                "Try again later or restart the app."
-            )
-            # Auto‑reset after 15 min
-            if time.time() - st.session_state["pin_time"] > 900:
-                st.session_state["pin_attempts"] = 0
-                st.session_state["marks_authenticated"] = False
-        else:
-            st.error(f"Invalid PIN. {remaining} attempt(s) remaining.")
-        return False
+        st.error(f"Invalid PIN. {remaining} attempt(s) remaining.")
+    return False
 
 
 # ── Marks‑entry data builder ─────────────────────────────────────
@@ -199,12 +201,9 @@ def render_tab_data_management() -> None:
             if st.button("Submit", help="Enter PIN to authenticate"):
                 _validate_pin(pin_code)
 
-        if st.session_state["pin_attempts"] >= 3 and not st.session_state["marks_authenticated"]:
+        if st.session_state["pin_attempts"] >= MAX_PIN_ATTEMPTS:
             st.warning("🔒 3 failed attempts reached. Waiting 15 min before retry...")
-        st.caption(
-            "Default PIN: `1234` (configured in `.streamlit/secrets.toml`). "
-            "Contact admin to change."
-        )
+        st.caption("Contact admin if you do not have the PIN.")
 
     # -----------------------------------------------------------------
     # Marks entry interface (shown after PIN auth)
