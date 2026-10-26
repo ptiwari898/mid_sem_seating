@@ -170,12 +170,30 @@ def get_marks_table(session_id: int, subject_id: int) -> pd.DataFrame:
         ).astype({"Absent": bool})
 
 
+def _cell(row: pd.Series) -> tuple[float | None, bool]:
+    absent = bool(row["Absent"])
+    return (None if absent or pd.isna(row["Marks"]) else float(row["Marks"])), absent
+
+
 def save_marks(
-    session: MarksSession, subject_id: int, table: pd.DataFrame, entered_by: str
+    session: MarksSession,
+    subject_id: int,
+    table: pd.DataFrame,
+    entered_by: str,
+    original: pd.DataFrame | None = None,
 ) -> int:
-    """Save the edited table. Absent students keep no marks. Returns rows saved."""
+    """Save the edited table. Absent students keep no marks. Returns rows saved.
+
+    Pass the table the teacher started from as `original`: only rows that differ
+    from it are written, so a stale table cannot blank marks another teacher saved.
+    """
+    before = {} if original is None else {
+        str(r["Roll Number"]): _cell(r) for _, r in original.iterrows()
+    }
     rows = []
     for _, r in table.iterrows():
+        if before.get(str(r["Roll Number"])) == _cell(r):
+            continue
         absent = bool(r["Absent"])
         value = None if absent or pd.isna(r["Marks"]) else float(r["Marks"])
         if value is not None and not 0 <= value <= session.max_marks:
@@ -186,6 +204,8 @@ def save_marks(
             (subject_id, str(r["Roll Number"]), value, int(absent), entered_by.strip(),
              _now().strftime(_TIME_FORMAT))
         )
+    if not rows:
+        return 0
     with _connect() as conn:
         # The subject must belong to this session, so a PIN cannot write to another one.
         owner = conn.execute(

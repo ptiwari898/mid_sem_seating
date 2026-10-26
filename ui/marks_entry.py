@@ -126,8 +126,8 @@ def render_teacher_marks_entry() -> None:
             st.error("Enter your name before saving.")
             return
         try:
-            saved = marks_store.save_marks(session, subject.id, edited, teacher)
+            saved = marks_store.save_marks(session, subject.id, edited, teacher, original=table)
         except marks_store.MarksError as exc:
             st.error(str(exc))
             return
-        st.success(f"Saved marks for {saved} students in {subject.name}.")
+        st.success(f"Saved {saved} changed row(s) in {subject.name}.")

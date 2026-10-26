@@ -89,3 +89,33 @@ def test_pin_form_lockout_window():
     assert lockout_seconds_left(MAX_PIN_ATTEMPTS - 1, 100, now=101) == 0
     assert lockout_seconds_left(MAX_PIN_ATTEMPTS, 100, now=101) > 0
     assert lockout_seconds_left(MAX_PIN_ATTEMPTS, 100, now=100 + LOCKOUT_SECONDS) == 0
+
+
+def test_stale_table_does_not_blank_marks_saved_by_another_teacher(opened):
+    _, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    stale = marks_store.get_marks_table(session.id, maths.id)  # teacher A opens blank table
+
+    other = stale.copy()
+    other["Marks"] = [20.0, 25.0, 10.0]
+    marks_store.save_marks(session, maths.id, other, "Prof B")
+
+    mine = stale.copy()
+    mine.loc[2, "Marks"] = 7.0  # teacher A only fills the third row
+    assert marks_store.save_marks(session, maths.id, mine, "Prof A", original=stale) == 1
+
+    assert marks_store.get_marks_table(session.id, maths.id)["Marks"].tolist() == [20.0, 25.0, 7.0]
+
+
+def test_clearing_a_saved_mark_is_still_possible(opened):
+    _, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    table = marks_store.get_marks_table(session.id, maths.id)
+    table["Marks"] = [20.0, 25.0, 10.0]
+    marks_store.save_marks(session, maths.id, table, "Prof A")
+
+    loaded = marks_store.get_marks_table(session.id, maths.id)
+    cleared = loaded.copy()
+    cleared.loc[0, "Marks"] = float("nan")
+    marks_store.save_marks(session, maths.id, cleared, "Prof A", original=loaded)
+    assert pd.isna(marks_store.get_marks_table(session.id, maths.id)["Marks"][0])
