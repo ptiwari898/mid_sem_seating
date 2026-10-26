@@ -14,6 +14,7 @@ from typing import Dict
 
 import pandas as pd
 
+from .academic_session import default_exam_title
 from .exporters import SAFE_XLSX, unique_sheet_name
 
 
@@ -90,7 +91,7 @@ def export_sirt_main_seating_excel(
     output_dir: Path,
     institute: str = "SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY",
     department: str = "DEPARTMENT OF CSIT",
-    exam_title: str = "I MID SEM EXAMINATION (JAN-JUN 2026)",
+    exam_title: str | None = None,
     default_branch: str = "CSIT",
     semester: str = "6th Sem",
 ) -> Path:
@@ -100,6 +101,7 @@ def export_sirt_main_seating_excel(
     """
     target = output_dir / "SIRT_Main_Seating.xlsx"
     output_dir.mkdir(parents=True, exist_ok=True)
+    exam_title = exam_title or default_exam_title()
 
     # Build rows: group by room then section
     rows = []
@@ -175,7 +177,7 @@ def export_sirt_debarred_excel(
     output_dir: Path,
     institute: str = "SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY",
     department: str = "DEPARTMENT OF CSIT",
-    exam_title: str = "I MID SEM EXAMINATION (JAN-JUN 2026)",
+    exam_title: str | None = None,
     semester: str = "6th Sem",
     attendance_cutoff: float = 40.0,
 ) -> Path:
@@ -186,6 +188,7 @@ def export_sirt_debarred_excel(
     """
     target = output_dir / "SIRT_Debarred_List.xlsx"
     output_dir.mkdir(parents=True, exist_ok=True)
+    exam_title = exam_title or default_exam_title()
 
     not_eligible = _fill_group_columns(not_eligible)
     not_eligible = not_eligible.sort_values(by=["Roll Number"], kind="mergesort").reset_index(drop=True)
@@ -255,7 +258,7 @@ def export_sirt_attendance_sheets_excel(
     subjects: list | None = None,
     institute: str = "SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY",
     department: str = "DEPARTMENT OF CSIT",
-    exam_title: str = "I MID SEM EXAMINATION (JAN-JUN 2026)",
+    exam_title: str | None = None,
     semester: str = "6th Sem",
 ) -> Path:
     """
@@ -268,6 +271,7 @@ def export_sirt_attendance_sheets_excel(
     """
     target = output_dir / "SIRT_Attendance_Sheets.xlsx"
     output_dir.mkdir(parents=True, exist_ok=True)
+    exam_title = exam_title or default_exam_title()
 
     if subjects is None:
         subjects = []

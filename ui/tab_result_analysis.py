@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from exam_seating import marks_store
+from exam_seating.academic_session import default_exam_title
 from exam_seating.exporters import SAFE_XLSX
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -153,7 +154,7 @@ def render_tab_result_analysis() -> None:
     institute  = hi1.text_input("Institute Name", value="SAGAR INSTITUTE OF RESEARCH & TECHNOLOGY", key="ra_institute")
     department = hi2.text_input("Department",     value="DEPARTMENT OF CSIT",                        key="ra_department")
     hi3, hi4 = st.columns(2)
-    exam_title = hi3.text_input("Exam Title",  value="I MID SEM EXAMINATION (JAN-JUN 2026)", key="ra_exam_title")
+    exam_title = hi3.text_input("Exam Title",  value=default_exam_title(), key="ra_exam_title")
     section    = hi4.text_input("Section",     placeholder="CSIT- 6th Sem - CSIT--A",        key="ra_section")
 
     # ── Data Source Selection ─────────────────────────────────────────────────
