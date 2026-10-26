@@ -7,6 +7,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from exam_seating.io_utils import parse_attendance
+
 MARKS_PIN_KEY = "MARKS_PIN"
 MAX_PIN_ATTEMPTS = 3
 LOCKOUT_SECONDS = 900
@@ -148,9 +150,7 @@ def render_tab_data_management() -> None:
                     st.error(f"Missing required columns: {', '.join(missing)}")
                 else:
                     # Normalise attendance
-                    attendance_numeric = pd.to_numeric(
-                        uploaded_df["Attendance Percentage"], errors="coerce"
-                    )
+                    attendance_numeric = parse_attendance(uploaded_df["Attendance Percentage"])
                     invalid_count = int(attendance_numeric.isna().sum())
                     if invalid_count > 0:
                         st.warning(f"{invalid_count} students had unparseable attendance and were excluded.")

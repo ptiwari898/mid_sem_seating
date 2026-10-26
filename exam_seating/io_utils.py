@@ -87,6 +87,22 @@ def _rename_columns(df: pd.DataFrame, expected_map: Dict[str, str]) -> pd.DataFr
     return df.rename(columns=rename_map)
 
 
+def parse_attendance(values: pd.Series) -> pd.Series:
+    """Turn an attendance column into numbers on a 0-100 scale (unparseable -> NaN).
+
+    Handles "90%" text, plain numbers, and Excel percent-formatted cells, which
+    arrive as fractions (90% is stored as 0.9). With no "%" text present, a column
+    whose largest value is 1 or less is read as fractions and multiplied by 100.
+    """
+    text = values.astype(str).str.strip()
+    has_percent_sign = bool(text.str.contains("%", regex=False).any())
+    numeric = pd.to_numeric(text.str.replace("%", "", regex=False).str.strip(), errors="coerce")
+    valid = numeric.dropna()
+    if not has_percent_sign and not valid.empty and valid.max() <= 1:
+        numeric = numeric * 100
+    return numeric
+
+
 def load_students(file_path: str | Path) -> pd.DataFrame:
     raw = _read_table(file_path, default_sqlite_table="students")
     expected = {
@@ -101,10 +117,7 @@ def load_students(file_path: str | Path) -> pd.DataFrame:
     students["Roll Number"] = students["Roll Number"].astype(str).str.strip()
     students["Name"] = students["Name"].astype(str).str.strip()
 
-    attendance_text = (
-        students["Attendance Percentage"].astype(str).str.replace("%", "", regex=False).str.strip()
-    )
-    students["Attendance Percentage"] = pd.to_numeric(attendance_text, errors="coerce")
+    students["Attendance Percentage"] = parse_attendance(students["Attendance Percentage"])
 
     missing_roll = students["Roll Number"].eq("")
     missing_name = students["Name"].eq("")

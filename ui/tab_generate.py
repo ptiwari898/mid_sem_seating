@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from exam_seating.io_utils import DataValidationError
+from exam_seating.io_utils import DataValidationError, parse_attendance
 from exam_seating.service import SeatingConfig, run_seating_system
 from exam_seating.sirt_exporters import (
     export_sirt_attendance_sheets_excel,
@@ -70,7 +70,7 @@ def render_tab_generate(info: dict) -> None:
                 st.error(f"Missing columns in uploaded file: {', '.join(missing)}")
                 students_df = pd.DataFrame()
             elif not students_df.empty:
-                attendance_numeric = pd.to_numeric(students_df["Attendance Percentage"], errors="coerce")
+                attendance_numeric = parse_attendance(students_df["Attendance Percentage"])
                 invalid_attendance_count = int(attendance_numeric.isna().sum())
                 if invalid_attendance_count > 0:
                     st.warning(
