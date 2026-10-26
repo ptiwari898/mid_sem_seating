@@ -196,19 +196,19 @@ def render_tab_result_analysis() -> None:
         # Use saved student data
         df = st.session_state["saved_students"].copy()
         if df.empty:
-            st.warning("⚠️ No student data saved yet. Please go to Saved Students tab to save student data first.")
-            st.info("💡 Save your student data in the Saved Students tab, then return here and toggle this option.")
+            st.warning("No student data saved yet. Please go to Saved Students tab to save student data first.")
+            st.info("Save your student data in the Saved Students tab, then return here and toggle this option.")
             return
         else:
             # Validate required columns
             required_cols = {"Roll Number", "Name"}
             if not required_cols.issubset(set(df.columns)):
                 missing = required_cols - set(df.columns)
-                st.error(f"❌ Saved student data missing required columns: {', '.join(missing)}")
+                st.error(f"Saved student data missing required columns: {', '.join(missing)}")
                 st.info("Please re-save valid student data in the Saved Students tab.")
                 return
             else:
-                st.success(f"✅ Using saved student data: {len(df)} students loaded")
+                st.success(f"Using saved student data: {len(df)} students loaded")
                 st.dataframe(df.head(10), use_container_width=True)
                 # Normalize column names for consistency
                 df.columns = [c.strip() for c in df.columns]

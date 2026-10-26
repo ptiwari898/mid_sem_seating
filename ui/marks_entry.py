@@ -33,19 +33,23 @@ def show_active_pin(slot=None) -> None:
         return
     st.session_state["_marks_pin_renders"] = st.session_state.get("_marks_pin_renders", 0) + 1
     with (slot.container() if slot is not None else st.container()):
-        st.info(
-            f"Marks entry is open for **{info['exam_title']}**. "
-            f"Teacher PIN: **{info['pin']}** (valid {marks_store.SESSION_DAYS} days). "
-            "Teachers enter it on the *Marks Entry* page (link: `/marks-entry`)."
-        )
-        marks = marks_store.export_marks(info["session_id"])
-        st.download_button(
-            "Download marks entered so far (CSV)",
-            data=marks.to_csv(index=False).encode("utf-8"),
-            file_name="marks_entered.csv",
-            mime="text/csv",
-            key=f"marks_csv_download_{st.session_state['_marks_pin_renders']}",
-        )
+        with st.container(border=True):
+            text, pin_box = st.columns([3, 1], vertical_alignment="center")
+            text.markdown(
+                f"**Marks entry is open** for {info['exam_title']}  \n"
+                f"Teachers enter the PIN on the Marks Entry page (`/marks-entry`). "
+                f"It is valid for {marks_store.SESSION_DAYS} days."
+            )
+            pin_box.code(info["pin"], language=None)
+            marks = marks_store.export_marks(info["session_id"])
+            st.download_button(
+                "Download marks entered so far",
+                icon=":material/download:",
+                data=marks.to_csv(index=False).encode("utf-8"),
+                file_name="marks_entered.csv",
+                mime="text/csv",
+                key=f"marks_csv_download_{st.session_state['_marks_pin_renders']}",
+            )
 
 
 def open_marks_session(
@@ -68,14 +72,14 @@ def open_marks_session(
 
 def render_teacher_marks_entry() -> None:
     """Teacher flow: enter the PIN, pick any subject, enter marks for eligible students."""
-    st.subheader("Enter the session PIN")
-    st.caption("Use the PIN given by the exam coordinator to load the eligible students.")
-
     session: marks_store.MarksSession | None = st.session_state.get("teacher_marks_session")
 
     if session is None:
-        pin = st.text_input("Session PIN", type="password", max_chars=6, key="tm_pin")
-        if st.button("Open", key="tm_open"):
+        st.caption("Enter the PIN from the exam coordinator to load your students.")
+        with st.form("tm_pin_form"):
+            pin = st.text_input("Session PIN", type="password", max_chars=6, placeholder="6 digits", key="tm_pin")
+            opened = st.form_submit_button("Open", type="primary", use_container_width=True)
+        if opened:
             wait = lockout_seconds_left(
                 st.session_state.get("tm_failed", 0), st.session_state.get("tm_last_failure", 0.0)
             )
@@ -97,30 +101,36 @@ def render_teacher_marks_entry() -> None:
             st.rerun()
         return
 
-    top, close = st.columns([5, 1])
-    top.success(f"Exam: {session.exam_title}  |  Max marks: {session.max_marks:g}")
-    if close.button("Close", key="tm_close"):
+    head, close = st.columns([4, 1], vertical_alignment="center")
+    head.markdown(f"**{session.exam_title}**  \nMaximum marks: {session.max_marks:g}")
+    if close.button("Close", key="tm_close", icon=":material/close:", use_container_width=True):
         st.session_state.pop("teacher_marks_session")
         st.rerun()
 
     locked = marks_store.is_locked(session.id)
     if locked:
         st.warning("Marks entry is locked by the coordinator. You can view marks but not change them.")
+
     subjects = marks_store.list_subjects(session.id)
-    subject = st.selectbox(
-        "Subject (all subjects are listed)", subjects, format_func=lambda s: s.name, key="tm_subject"
-    )
     sections = marks_store.list_sections(session.id)
-    section = (
-        st.selectbox("Section", ["All"] + sections, key="tm_section") if sections else "All"
-    )
-    teacher = st.text_input("Your name", key="tm_teacher")
+    with st.container(border=True):
+        pick_subject, pick_section = st.columns(2)
+        subject = pick_subject.selectbox(
+            "Subject", subjects, format_func=lambda s: s.name, key="tm_subject"
+        )
+        section = (
+            pick_section.selectbox("Section", ["All"] + sections, key="tm_section") if sections else "All"
+        )
+        teacher = st.text_input("Your name", key="tm_teacher")
 
     table = marks_store.get_marks_table(
         session.id, subject.id, None if section == "All" else section
     )
     entered = int((table["Marks"].notna() | table["Absent"]).sum())
-    st.caption(f"{entered} of {len(table)} students already have an entry for this subject.")
+    st.progress(
+        entered / len(table) if len(table) else 0.0,
+        text=f"{entered} of {len(table)} students have an entry for {subject.name}",
+    )
 
     edited = st.data_editor(
         table,
@@ -135,7 +145,10 @@ def render_teacher_marks_entry() -> None:
             "Absent": st.column_config.CheckboxColumn("Absent"),
         },
     )
-    if st.button("💾 Save Marks", type="primary", key="tm_save", disabled=locked):
+    if st.button(
+        "Save marks", type="primary", icon=":material/save:", key="tm_save",
+        disabled=locked, use_container_width=True,
+    ):
         if not teacher.strip():
             st.error("Enter your name before saving.")
             return

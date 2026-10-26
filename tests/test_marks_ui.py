@@ -49,7 +49,7 @@ def test_pin_banner_shown_twice_in_one_run_does_not_crash():
     for _ in range(2):  # the second click has an older PIN already on screen
         app.button[0].click().run()
         assert not app.exception
-        assert len(app.info) == 1 and len(app.get("download_button")) == 1
+        assert len(app.code) == 1 and len(app.get("download_button")) == 1
 
 
 def test_wrong_pin_is_refused_and_right_pin_lists_all_subjects():
@@ -67,17 +67,17 @@ def test_section_filter_limits_the_rows_a_teacher_sees():
     pin, _ = _make_session()
     app = _open_as_teacher(pin)
     assert app.selectbox[1].options == ["All", "A", "B"]
-    assert any("of 2 students" in c.value for c in app.caption)
+    assert any("of 2 students" in p.proto.text for p in app.get("progress"))
 
     app.selectbox[1].select("B").run()
     assert not app.exception
-    assert any("of 1 students" in c.value for c in app.caption)
+    assert any("of 1 students" in p.proto.text for p in app.get("progress"))
 
 
 def test_saving_without_a_teacher_name_is_refused():
     pin, _ = _make_session()
     app = _open_as_teacher(pin)
-    next(b for b in app.button if b.label.endswith("Save Marks")).click().run()
+    next(b for b in app.button if b.label == "Save marks").click().run()
     assert [e.value for e in app.error] == ["Enter your name before saving."]
 
 

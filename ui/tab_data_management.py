@@ -45,20 +45,12 @@ def render_tab_data_management() -> None:
     """Render the saved-student data tab."""
     _init_session_state()
 
-    st.header("📋 Saved Students")
+    st.header("Saved Students")
+    st.caption("Keep a student list for this browser session so Result Analysis can use it.")
 
-    # -----------------------------------------------------------------
-    # A. Student Data Storage
-    # -----------------------------------------------------------------
-    st.subheader("💾 Student Data Storage")
+    saved = st.session_state["saved_students"]
 
-    st.caption("Upload and save student data. This data will be available in the Result Analysis tab.")
-    st.info(
-        "💡 **Tip:** Save your student list once. It will persist for this session "
-        "and can be loaded automatically in the Result Analysis tab."
-    )
-
-    with st.expander("Upload Students File", expanded=st.session_state["saved_students"].empty):
+    with st.expander("Upload students file", expanded=saved.empty):
         students_file = st.file_uploader(
             "Upload students (.xlsx/.xls/.csv)",
             type=["xlsx", "xls", "csv"],
@@ -107,44 +99,28 @@ def render_tab_data_management() -> None:
 
                 if not uploaded_df.empty:
                     _save_students_to_session(uploaded_df)
-                    st.success(f"✅ Saved {len(uploaded_df)} students to session.")
+                    st.success(f"Saved {len(uploaded_df)} students to this session.")
                     st.dataframe(
                         uploaded_df.head(10), use_container_width=True, hide_index=True
                     )
 
             except Exception as e:
-                st.error(f"⚠️ Failed to process file: {str(e)[:200]}")
+                st.error(f"Failed to process file: {str(e)[:200]}")
 
-    # -----------------------------------------------------------------
-    # Buttons for managing saved data
-    # -----------------------------------------------------------------
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
-        if not st.session_state["saved_students"].empty:
-            if st.button("🗑️ Clear Saved Data", help="Clear saved student data"):
+    saved = st.session_state["saved_students"]  # read again: the upload above may have changed it
+    if not saved.empty:
+        saved_at = datetime.fromtimestamp(st.session_state.get("students_saved_at", 0))
+        with st.container(border=True):
+            c1, c2, c3 = st.columns([3, 1, 1], vertical_alignment="center")
+            c1.markdown(f"**{len(saved)} students** saved at {saved_at:%H:%M}")
+            c2.download_button(
+                "Download",
+                icon=":material/download:",
+                data=saved.to_csv(index=False).encode("utf-8"),
+                file_name="saved_students.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            if c3.button("Clear", icon=":material/delete:", help="Remove the saved list", use_container_width=True):
                 _clear_saved_students()
                 st.rerun()
-    with col_b:
-        if st.session_state["saved_students"].empty:
-            st.caption("No saved data yet.")
-
-    # -----------------------------------------------------------------
-    # B. Marks entry by session PIN
-    # -----------------------------------------------------------------
-    st.divider()
-    st.caption("Teachers enter marks on the separate **Marks Entry** page (share the /marks-entry link).")
-
-    # -----------------------------------------------------------------
-    # C. Saved student data
-    # -----------------------------------------------------------------
-    saved = st.session_state["saved_students"]
-    if not saved.empty:
-        st.divider()
-        saved_at = datetime.fromtimestamp(st.session_state.get("students_saved_at", 0))
-        st.caption(f"📁 Saved students: **{len(saved)}** (saved at {saved_at:%H:%M:%S})")
-        st.download_button(
-            "📥 Download saved students (CSV)",
-            data=saved.to_csv(index=False).encode("utf-8"),
-            file_name="saved_students.csv",
-            mime="text/csv",
-        )
