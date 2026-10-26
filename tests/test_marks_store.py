@@ -253,3 +253,48 @@ def test_backup_can_be_restored_after_the_database_is_lost(opened):
 def test_restore_rejects_files_that_are_not_backups():
     with pytest.raises(marks_store.MarksError, match="not a marks backup"):
         marks_store.restore_from_bytes(b"hello")
+
+
+def test_saved_plans_are_listed_newest_first_with_their_zip_and_can_be_deleted(opened):
+    _, session = opened
+    rooms = [{"Room": "F-307", "Students": 30, "From": "001", "To": "030"}]
+    common = dict(
+        department="CSIT", semester="6th Sem", cutoff=40.0, total=40, eligible=35,
+        debarred=5, allocated=35, rooms=rooms,
+    )
+    first = marks_store.save_plan(exam_title="Mid A", archive=b"zip-a", **common)
+    second = marks_store.save_plan(exam_title="Mid B", archive=b"zip-b", session_id=session.id, **common)
+
+    plans = marks_store.list_plans()
+    assert [p.exam_title for p in plans] == ["Mid B", "Mid A"]
+    assert plans[0].session_id == session.id and plans[0].rooms == rooms
+    assert marks_store.get_plan_archive(first) == b"zip-a"
+
+    marks_store.delete_plan(first)
+    assert [p.id for p in marks_store.list_plans()] == [second]
+    assert marks_store.get_plan_archive(first) is None
+
+
+def test_deleting_a_marks_session_keeps_its_plan(opened):
+    _, session = opened
+    marks_store.save_plan(
+        exam_title="Mid", department="D", semester="S", cutoff=40, total=1, eligible=1,
+        debarred=0, allocated=1, rooms=[], archive=b"z", session_id=session.id,
+    )
+    marks_store.delete_session(session.id)
+    (plan,) = marks_store.list_plans()
+    assert plan.session_id is None
+
+
+def test_subject_progress_shows_entries_and_last_teacher(opened):
+    _, session = opened
+    maths = marks_store.list_subjects(session.id)[0]
+    blank = marks_store.get_marks_table(session.id, maths.id)
+    edited = blank.copy()
+    edited.loc[0, "Marks"] = 12.0
+    edited.loc[1, "Absent"] = True
+    marks_store.save_marks(session, maths.id, edited, "Prof A", original=blank)
+
+    progress = marks_store.subject_progress(session.id).set_index("Subject")
+    assert progress.loc["Maths", ["Entered", "Students", "Last Teacher"]].tolist() == [2, 3, "Prof A"]
+    assert progress.loc["Physics", "Entered"] == 0 and pd.isna(progress.loc["Physics", "Last Teacher"])

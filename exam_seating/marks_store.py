@@ -1,4 +1,4 @@
-"""Shared SQLite store for marks entry.
+"""Shared SQLite store for generated seating plans and marks entry.
 
 A coordinator opens a session from the eligible students of a seating run and gets
 a PIN. Any teacher with the PIN can open the session, pick a subject and enter
@@ -6,6 +6,7 @@ marks. Data lives in a file so every browser session of the app sees the same ro
 """
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import sqlite3
@@ -49,6 +50,22 @@ class SessionSummary:
 
 
 @dataclass(frozen=True)
+class PlanRecord:
+    id: int
+    created_at: str
+    exam_title: str
+    department: str
+    semester: str
+    cutoff: float
+    total: int
+    eligible: int
+    debarred: int
+    allocated: int
+    rooms: list[dict]  # [{"Room": ..., "Students": ..., "From": ..., "To": ...}]
+    session_id: int | None  # the marks session opened with this plan, if any
+
+
+@dataclass(frozen=True)
 class Subject:
     id: int
     name: str
@@ -84,6 +101,21 @@ def _connect():
             PRIMARY KEY (session_id, roll_no)
         );
         CREATE TABLE IF NOT EXISTS failed_pins (at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS plans (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            exam_title TEXT NOT NULL,
+            department TEXT NOT NULL,
+            semester   TEXT NOT NULL,
+            cutoff     REAL NOT NULL,
+            total      INTEGER NOT NULL,
+            eligible   INTEGER NOT NULL,
+            debarred   INTEGER NOT NULL,
+            allocated  INTEGER NOT NULL,
+            rooms_json TEXT NOT NULL,
+            session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+            archive    BLOB NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS marks_log (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -201,6 +233,80 @@ def find_session(pin: str) -> MarksSession | None:
         if row is None:
             conn.execute("INSERT INTO failed_pins (at) VALUES (?)", (now.strftime(_TIME_FORMAT),))
     return None if row is None else MarksSession(row[0], row[1], row[2])
+
+
+def save_plan(
+    *,
+    exam_title: str,
+    department: str,
+    semester: str,
+    cutoff: float,
+    total: int,
+    eligible: int,
+    debarred: int,
+    allocated: int,
+    rooms: list[dict],
+    archive: bytes,
+    session_id: int | None = None,
+) -> int:
+    """Keep a generated seating plan (summary, per-room counts, zipped reports) for the admin."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO plans (created_at, exam_title, department, semester, cutoff, total,
+                               eligible, debarred, allocated, rooms_json, session_id, archive)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (_now().strftime(_TIME_FORMAT), exam_title, department, semester, float(cutoff),
+             total, eligible, debarred, allocated, json.dumps(rooms), session_id, archive),
+        )
+        return int(cursor.lastrowid)
+
+
+def list_plans() -> list[PlanRecord]:
+    """Every saved plan, newest first. The zip is not loaded; see get_plan_archive."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, created_at, exam_title, department, semester, cutoff, total, eligible,
+                   debarred, allocated, rooms_json, session_id
+            FROM plans ORDER BY id DESC
+            """
+        ).fetchall()
+    return [
+        PlanRecord(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], json.loads(r[10]), r[11])
+        for r in rows
+    ]
+
+
+def get_plan_archive(plan_id: int) -> bytes | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT archive FROM plans WHERE id = ?", (plan_id,)).fetchone()
+    return None if row is None else bytes(row[0])
+
+
+def delete_plan(plan_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM plans WHERE id = ?", (plan_id,))
+
+
+def subject_progress(session_id: int) -> pd.DataFrame:
+    """Per subject: how many students have an entry, and who saved last and when."""
+    with _connect() as conn:
+        return pd.read_sql_query(
+            """
+            SELECT u.name AS "Subject",
+                   COUNT(CASE WHEN m.marks IS NOT NULL OR m.is_absent = 1 THEN 1 END) AS "Entered",
+                   (SELECT COUNT(*) FROM students t WHERE t.session_id = u.session_id) AS "Students",
+                   MAX(m.updated_at) AS "Last Saved",
+                   (SELECT m2.entered_by FROM marks m2 WHERE m2.subject_id = u.id
+                     ORDER BY m2.updated_at DESC, m2.rowid DESC LIMIT 1) AS "Last Teacher"
+            FROM subjects u LEFT JOIN marks m ON m.subject_id = u.id
+            WHERE u.session_id = ? GROUP BY u.id ORDER BY u.id
+            """,
+            conn,
+            params=(session_id,),
+        )
 
 
 def list_sessions() -> list[SessionSummary]:
